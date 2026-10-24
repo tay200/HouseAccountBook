@@ -5,7 +5,7 @@ type Options = {
   /** 가져올 열 (기본: 전체) */
   select?: string
   /** 정렬 순서 */
-  order?: { column: string; ascending?: boolean }[]
+  order?: { column: string; ascending?: boolean; nullsFirst?: boolean }[]
   /** 저장/삭제 후 함께 새로고침할 다른 캐시 키 */
   alsoInvalidate?: string[][]
 }
@@ -26,7 +26,7 @@ export function createTableApi<Row extends { id: string }>(table: string, option
       queryKey: key,
       queryFn: async () => {
         let query = supabase.from(table).select(select)
-        for (const o of order) query = query.order(o.column, { ascending: o.ascending ?? true })
+        for (const o of order) query = query.order(o.column, { ascending: o.ascending ?? true, nullsFirst: o.nullsFirst })
         const { data, error } = await query
         if (error) throw error
         return data as unknown as Row[]

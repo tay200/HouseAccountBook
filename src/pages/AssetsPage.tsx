@@ -7,14 +7,15 @@ import {
   realAssetsApi,
   savingsApi,
   snapshotsApi,
-  tradesApi,
+  stockHoldingsApi,
+  stockTradesApi,
   useStockPrices,
 } from '../api/tables'
 import CrudTable, { type Column } from '../components/CrudTable'
 import { useLookups } from '../hooks/useLookups'
 import { formatWon, todayString } from '../lib/format'
 import { calcDeposit, calcLoan, calcSaving, termByMonths } from '../lib/finance'
-import { investSummary } from '../lib/invest'
+import { analyzeInvest, investSummary } from '../lib/invest'
 import {
   LOAN_METHOD_LABEL,
   SAVING_METHOD_LABEL,
@@ -78,7 +79,8 @@ function useAssetItems() {
   const { data: loans = [] } = loansApi.useList()
   const { data: realAssets = [] } = realAssetsApi.useList()
   const { data: ledger = [] } = ledgerApi.useList()
-  const { data: trades = [] } = tradesApi.useList()
+  const { data: stockHoldings = [] } = stockHoldingsApi.useList()
+  const { data: trades = [] } = stockTradesApi.useList()
   const { data: prices = [] } = useStockPrices()
 
   const items: AssetItem[] = [
@@ -98,7 +100,7 @@ function useAssetItems() {
   for (const e of ledger) books.set(e.book, (books.get(e.book) ?? 0) + (e.direction === 'in' ? e.amount : -e.amount))
   for (const [book, balance] of books) items.push({ label: book, group: '통장 기록', amount: balance, term: 'short', risky: false })
 
-  const invest = investSummary(trades, new Map(prices.map((p) => [p.stock_code, p])))
+  const invest = investSummary(analyzeInvest(stockHoldings, trades, new Map(prices.map((p) => [p.stock_code, p]))).positions)
   if (invest.value > 0) items.push({ label: '투자 평가금액', group: '투자', amount: invest.value, term: 'mid', risky: true })
 
   const financial = items.reduce((s, i) => s + i.amount, 0)

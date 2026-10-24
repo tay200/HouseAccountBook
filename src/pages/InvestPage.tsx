@@ -1,12 +1,20 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { investAccountsApi, tradesApi, useRefreshStockPrices, useSaveStockPrice, useStockPrices } from '../api/tables'
+import {
+  investAccountsApi,
+  stockHoldingsApi,
+  stockTradesApi,
+  useRefreshStockPrices,
+  useSaveStockPrice,
+  useStockPrices,
+} from '../api/tables'
 import AmountInput from '../components/AmountInput'
 import CrudTable, { type Column } from '../components/CrudTable'
-import TradeForm, { type TradeMode } from '../components/TradeForm'
+import HoldingForm from '../components/HoldingForm'
+import TradeForm from '../components/TradeForm'
 import { useLookups } from '../hooks/useLookups'
 import { formatNumber, formatUsd, formatWon } from '../lib/format'
-import { calcTrade, holdings, investSummary } from '../lib/invest'
-import { FX_CODE, type InvestAccount, type Market, type StockPrice, type Trade } from '../lib/types'
+import { analyzeInvest, investSummary, tradeAmount } from '../lib/invest'
+import { FX_CODE, SIDE_LABEL, type InvestAccount, type Market, type StockHolding, type StockPrice, type StockTrade, type TradeSide } from '../lib/types'
 
 /** 해당 통화로 금액 표시 (KR=원, US=달러) */
 function formatLocal(value: number, market: Market) {
@@ -23,34 +31,46 @@ function rate(value: number, base: number) {
   return <span className={r > 0 ? 'text-red-600' : r < 0 ? 'text-blue-600' : ''}>{r > 0 ? '+' : ''}{r.toFixed(2)}%</span>
 }
 
+/** 매수는 빨강, 매도는 파랑 */
+function SideBadge({ side }: { side: TradeSide }) {
+  const color = side === 'buy' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+  return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${color}`}>{SIDE_LABEL[side]}</span>
+}
+
 export default function InvestPage() {
   const { data: accounts = [] } = investAccountsApi.useList()
-  const { data: trades = [] } = tradesApi.useList()
+  const { data: stockHoldings = [] } = stockHoldingsApi.useList()
+  const { data: trades = [] } = stockTradesApi.useList()
   const { data: prices = [] } = useStockPrices()
-  const saveTrade = tradesApi.useSave()
-  const deleteTrade = tradesApi.useDelete()
+  const saveTrade = stockTradesApi.useSave()
+  const deleteTrade = stockTradesApi.useDelete()
+  const saveHolding = stockHoldingsApi.useSave()
+  const deleteHolding = stockHoldingsApi.useDelete()
   const saveAccount = investAccountsApi.useSave()
   const deleteAccount = investAccountsApi.useDelete()
   const refresh = useRefreshStockPrices()
   const { members, memberName } = useLookups()
-  // 매매 입력 폼 열림 상태: 매수/매도 중 무엇으로 열지, 매도면 어떤 보유 종목인지
-  // (보유 종목 쪽 버튼에서도 열 수 있도록 여기서 관리)
-  const [tradeForm, setTradeForm] = useState<{ mode: TradeMode; holdingKey?: string } | null>(null)
-  const tradesCardRef = useRef<HTMLDivElement>(null)
 
-  function startTrade(mode: TradeMode, holdingKey?: string) {
-    setTradeForm({ mode, holdingKey })
+  // 매매 내역의 새 기록 폼: 매수/매도 중 무엇인지, 매도면 어떤 보유 종목인지
+  // (보유 종목 줄의 '매도' 버튼에서도 열 수 있도록 여기서 관리)
+  const [tradeForm, setTradeForm] = useState<{ side: TradeSide; positionKey?: string } | null>(null)
+  const tradesCardRef = useRef<HTMLDivElement>(null)
+  // 보유 종목 폼: 'new' = 추가, 객체 = 그 보유분 수정
+  const [holdingForm, setHoldingForm] = useState<'new' | StockHolding | null>(null)
+
+  function startTrade(side: TradeSide, positionKey?: string) {
+    setTradeForm({ side, positionKey })
     tradesCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const priceByCode = new Map(prices.map((p) => [p.stock_code, p]))
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
+  const { positions, open, realizedByTrade } = analyzeInvest(stockHoldings, trades, priceByCode)
 
   // 계좌별 현황에서 체크한 계좌만 위쪽 합계에 넣는다 (예: 연금 계좌 제외)
   const isIncluded = (a: InvestAccount) => a.included !== false
   const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
-  const summary = investSummary(trades.filter((t) => includedIds.has(t.account_id)), priceByCode)
-  const holdingList = holdings(trades, priceByCode)
+  const summary = investSummary(positions.filter((p) => includedIds.has(p.accountId)))
   const allIncluded = accounts.length > 0 && accounts.every(isIncluded)
 
   function toggleAccount(a: InvestAccount) {
@@ -65,8 +85,7 @@ export default function InvestPage() {
   const lastUpdated = prices.reduce((latest, p) => (p.updated_at > latest ? p.updated_at : latest), '')
 
   function handleRefresh() {
-    const open = trades.filter((t) => !t.sell_date)
-    const codesOf = (market: Market) => [...new Set(open.filter((t) => t.market === market).map((t) => t.stock_code))]
+    const codesOf = (market: Market) => [...new Set(open.filter((p) => p.market === market).map((p) => p.code))]
     refresh.mutate({ kr: codesOf('KR'), us: codesOf('US') }, {
       onSuccess: (failed) => {
         if (failed.length > 0) alert(`일부 종목은 조회하지 못했어요. 현재가를 직접 입력해 주세요.\n${failed.map((f) => `${f.code}: ${f.error}`).join('\n')}`)
@@ -74,47 +93,30 @@ export default function InvestPage() {
     })
   }
 
-  const fxRender = (value: number | null, t: Trade) =>
-    t.market !== 'US' ? <span className="text-slate-300">-</span> : value ? formatNumber(value) : <span className="text-slate-400">현재</span>
+  const dash = <span className="text-slate-300">-</span>
   // 입력은 TradeForm 이 맡으므로 여기 열들은 표시용
-  const tradeColumns: Column<Trade>[] = [
-    {
-      key: 'state',
-      label: '구분',
-      render: (t) =>
-        t.sell_date ? <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700">매도</span> : <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">보유</span>,
-    },
+  const tradeColumns: Column<StockTrade>[] = [
+    { key: 'side', label: '구분', render: (t) => <SideBadge side={t.side} /> },
+    { key: 'trade_date', label: '날짜' },
     { key: 'account_id', label: '계좌', render: (t) => accountName(t.account_id) },
     { key: 'market', label: '시장', render: (t) => (t.market === 'US' ? '미국' : '한국') },
     { key: 'stock_code', label: '종목코드' },
     { key: 'stock_name', label: '종목명' },
-    { key: 'buy_date', label: '매수일' },
-    { key: 'buy_price', label: '매수단가', align: 'right', render: (t) => formatLocal(t.buy_price, t.market) },
+    { key: 'price', label: '단가', align: 'right', render: (t) => formatLocal(t.price, t.market) },
     { key: 'quantity', label: '수량', align: 'right', render: (t) => formatNumber(t.quantity) },
-    { key: 'buy_fx_rate', label: '매수환율', align: 'right', render: (t) => fxRender(t.buy_fx_rate, t) },
-    { key: 'sell_date', label: '매도일' },
     {
-      key: 'sell_price',
-      label: '매도단가',
+      key: 'fx_rate',
+      label: '환율',
       align: 'right',
-      render: (t) => (t.sell_price === null ? <span className="text-slate-300">-</span> : formatLocal(t.sell_price, t.market)),
+      render: (t) => (t.market !== 'US' ? dash : t.fx_rate ? formatNumber(t.fx_rate) : <span className="text-slate-400">현재</span>),
     },
-    { key: 'sell_fx_rate', label: '매도환율', align: 'right', render: (t) => (t.sell_date ? fxRender(t.sell_fx_rate, t) : <span className="text-slate-300">-</span>) },
     { key: 'fee', label: '수수료·세금', align: 'right', render: (t) => formatLocal(t.fee, t.market) },
+    { key: 'amount', label: '금액(원)', align: 'right', render: (t) => formatWon(Math.round(tradeAmount(t, priceByCode))) },
     {
-      key: 'cost',
-      label: '매수금액(원)',
+      key: 'realized',
+      label: '실현손익',
       align: 'right',
-      render: (t) => formatWon(Math.round(calcTrade(t, priceByCode).cost)),
-    },
-    {
-      key: 'profit',
-      label: '손익',
-      align: 'right',
-      render: (t) => {
-        const r = calcTrade(t, priceByCode)
-        return r.sold ? <>실현 {signed(Math.round(r.realized))}</> : signed(Math.round(r.unrealized))
-      },
+      render: (t) => (t.side === 'sell' ? signed(Math.round(realizedByTrade.get(t.id) ?? 0)) : dash),
     },
     { key: 'memo', label: '메모' },
   ]
@@ -145,7 +147,7 @@ export default function InvestPage() {
             <PriceCell code={FX_CODE} price={priceByCode.get(FX_CODE)} market="US" format={(v) => `${formatNumber(v)}원`} />
           </span>
           {lastUpdated && <span className="text-xs text-slate-500">현재가 갱신 {new Date(lastUpdated).toLocaleString('ko-KR')}</span>}
-          <button className="btn btn-primary" onClick={handleRefresh} disabled={refresh.isPending || trades.length === 0}>
+          <button className="btn btn-primary" onClick={handleRefresh} disabled={refresh.isPending || open.length === 0}>
             {refresh.isPending ? '조회 중…' : '현재가 새로고침'}
           </button>
         </div>
@@ -179,8 +181,8 @@ export default function InvestPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {accounts.map((a) => {
-              const s = investSummary(trades.filter((t) => t.account_id === a.id), priceByCode)
-              const count = holdingList.filter((h) => h.accountId === a.id).length
+              const s = investSummary(positions.filter((p) => p.accountId === a.id))
+              const count = open.filter((p) => p.accountId === a.id).length
               const included = isIncluded(a)
               return (
                 <tr key={a.id} className={included ? '' : 'text-slate-400'}>
@@ -205,7 +207,7 @@ export default function InvestPage() {
             <tr>
               <td />
               <td className="py-2">선택 합계</td>
-              <td className="py-2 text-right">{holdingList.filter((h) => includedIds.has(h.accountId)).length}</td>
+              <td className="py-2 text-right">{open.filter((p) => includedIds.has(p.accountId)).length}</td>
               <td className="py-2 text-right">{formatWon(summary.cost)}</td>
               <td className="py-2 text-right">{formatWon(summary.value)}</td>
               <td className="py-2 text-right">{signed(summary.unrealized)}</td>
@@ -220,12 +222,28 @@ export default function InvestPage() {
       <div className="card">
         <div className="mb-1 flex items-center justify-between">
           <h3 className="font-semibold">보유 종목</h3>
-          <button className="btn btn-primary" onClick={() => startTrade('buy')} disabled={accounts.length === 0}>
-            + 매수 추가
-          </button>
+          {holdingForm === null && (
+            <button className="btn btn-primary" onClick={() => setHoldingForm('new')} disabled={accounts.length === 0}>
+              + 보유 종목 추가
+            </button>
+          )}
         </div>
         <p className="mb-4 text-xs text-slate-500">
-          보유 종목은 매매 내역에서 아직 팔지 않은 것을 모아서 보여줘요. 새로 산 종목은 '+ 매수 추가', 판 종목은 줄 오른쪽 '매도'로 넣으세요.{' '}현재가를 클릭하고 금액을 입력한 뒤 Enter 를 누르면 직접 고칠 수 있어요. 자동 조회가 안 되는 종목에 쓰세요.</p>
+          보유 수량·평균단가 = 직접 넣은 보유분 + 매매 내역의 매수 − 매도 (이동평균). 매매 기록이 없는 종목은 '+ 보유 종목 추가'로 넣으세요.
+          현재가를 클릭하고 금액을 입력한 뒤 Enter 를 누르면 직접 고칠 수 있어요. 자동 조회가 안 되는 종목에 쓰세요.
+        </p>
+        {holdingForm !== null && (
+          <HoldingForm
+            key={holdingForm === 'new' ? 'new' : holdingForm.id}
+            accounts={accounts}
+            holdings={stockHoldings}
+            priceByCode={priceByCode}
+            row={holdingForm === 'new' ? undefined : holdingForm}
+            onSave={(values) => saveHolding.mutateAsync(values)}
+            onDone={() => setHoldingForm(null)}
+            onCancel={() => setHoldingForm(null)}
+          />
+        )}
         <table className="w-full text-sm tabular-nums">
           <thead className="border-b border-slate-200 text-xs text-slate-500">
             <tr>
@@ -237,48 +255,66 @@ export default function InvestPage() {
               <th className="py-2 text-right font-medium">평가금액</th>
               <th className="py-2 text-right font-medium">평가손익</th>
               <th className="py-2 text-right font-medium">수익률</th>
-              <th className="w-16" />
+              <th className="w-44" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {holdingList.map((h) => (
-              <tr key={h.key}>
-                <td className="py-2">{accountName(h.accountId)}</td>
-                <td className="py-2">
-                  {h.market === 'US' && <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-500">US</span>}
-                  {h.name} <span className="text-xs text-slate-400">{h.code}</span>
-                </td>
-                <td className="py-2 text-right">{formatNumber(h.quantity)}</td>
-                <td className="py-2 text-right">{formatLocal(h.market === 'US' ? h.costLocal / h.quantity : Math.round(h.costLocal / h.quantity), h.market)}</td>
-                <td className="py-2 text-right">
-                  <PriceCell code={h.code} price={priceByCode.get(h.code)} market={h.market} format={(v) => formatLocal(v, h.market)} />
-                </td>
-                <td className="py-2 text-right">{formatWon(Math.round(h.value))}</td>
-                <td className="py-2 text-right">{signed(Math.round(h.unrealized))}</td>
-                <td className="py-2 text-right">{rate(h.unrealized, h.cost)}</td>
-                <td className="py-2 text-right">
-                  <button className="btn btn-text text-blue-600" onClick={() => startTrade('sell', h.key)}>매도</button>
-                </td>
-              </tr>
-            ))}
+            {open.map((p) => {
+              const avg = p.costLocal / p.quantity
+              return (
+                <tr key={p.key} className={holdingForm !== null && holdingForm !== 'new' && holdingForm.id === p.holding?.id ? 'bg-blue-50' : ''}>
+                  <td className="py-2">{accountName(p.accountId)}</td>
+                  <td className="py-2">
+                    {p.market === 'US' && <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-500">US</span>}
+                    {p.name} <span className="text-xs text-slate-400">{p.code}</span>
+                  </td>
+                  <td className="py-2 text-right">{formatNumber(p.quantity)}</td>
+                  <td className="py-2 text-right">{formatLocal(p.market === 'US' ? avg : Math.round(avg), p.market)}</td>
+                  <td className="py-2 text-right">
+                    <PriceCell code={p.code} price={priceByCode.get(p.code)} market={p.market} format={(v) => formatLocal(v, p.market)} />
+                  </td>
+                  <td className="py-2 text-right">{formatWon(Math.round(p.value))}</td>
+                  <td className="py-2 text-right">{signed(Math.round(p.unrealized))}</td>
+                  <td className="py-2 text-right">{rate(p.unrealized, p.cost)}</td>
+                  <td className="py-2 text-right whitespace-nowrap">
+                    <button className="btn btn-text text-blue-600" onClick={() => startTrade('sell', p.key)}>매도</button>
+                    {/* 직접 넣은 보유분이 있는 종목만 수정·삭제 (매매 기록은 매매 내역에서) */}
+                    {p.holding && (
+                      <>
+                        <button className="btn btn-text" onClick={() => setHoldingForm(p.holding)} title="직접 넣은 보유분 수정">수정</button>
+                        <button
+                          className="btn btn-danger-text"
+                          onClick={() => confirm('직접 넣은 보유분을 삭제할까요? (매매 내역은 그대로)') && deleteHolding.mutate(p.holding!.id)}
+                        >
+                          삭제
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
-        {holdingList.length === 0 && <p className="py-6 text-center text-sm text-slate-400">보유 종목이 없어요.</p>}
+        {open.length === 0 && <p className="py-6 text-center text-sm text-slate-400">보유 종목이 없어요.</p>}
       </div>
 
       <div className="card scroll-mt-4" ref={tradesCardRef}>
         <div className="mb-1 flex items-center justify-between">
           <h3 className="font-semibold">매매 내역</h3>
-          {!tradeForm && (
-            <button className="btn btn-primary" onClick={() => startTrade('buy')} disabled={accounts.length === 0}>
-              + 매매 추가
+          <div className="flex gap-2">
+            <button className="btn bg-red-600 text-white hover:bg-red-700" onClick={() => startTrade('buy')} disabled={accounts.length === 0}>
+              + 매수 추가
             </button>
-          )}
+            <button className="btn bg-blue-600 text-white hover:bg-blue-700" onClick={() => startTrade('sell')} disabled={open.length === 0}>
+              + 매도 추가
+            </button>
+          </div>
         </div>
         {accounts.length === 0 && <p className="mb-2 text-xs text-amber-700">먼저 아래 '투자 계좌'에서 계좌를 추가해 주세요.</p>}
         <p className="mb-4 text-xs text-slate-500">
-          매수 1번 = 1줄. 매도를 넣으면 먼저 산 줄부터 매도일·매도단가가 채워지고, 일부만 팔면 그 줄이 판 것과 남은 것으로 나뉘어요.
-          매수금액(원)은 단가 × 수량 × 환율로 자동 계산돼요. 미국 주식은 단가·수수료를 달러로 넣으세요. 수수료를 모르면 0.
+          매수 1건 = 1줄, 매도 1건 = 1줄. 매도의 실현손익은 그때까지의 평균단가로 계산해요 (이동평균).
+          미국 주식은 단가·수수료를 달러로 넣고, 환율을 비우면 현재 환율로 계산해요. 수수료를 모르면 0.
         </p>
         <CrudTable
           rows={trades}
@@ -286,17 +322,17 @@ export default function InvestPage() {
           onSave={(values) => saveTrade.mutateAsync(values)}
           onDelete={(id) => deleteTrade.mutate(id)}
           adding={tradeForm !== null}
-          onAddingChange={(open) => setTradeForm(open ? { mode: 'buy' } : null)}
+          onAddingChange={(opened) => setTradeForm(opened ? { side: 'buy' } : null)}
           renderForm={({ row, onDone, onCancel }) => (
             <TradeForm
-              // 다른 보유 종목의 '매도'를 누르면 폼을 새로 연다
-              key={row ? row.id : `${tradeForm?.mode}-${tradeForm?.holdingKey ?? ''}`}
+              // 다른 버튼(매수↔매도, 다른 종목의 매도)을 누르면 폼을 새로 연다
+              key={row ? row.id : `${tradeForm?.side}-${tradeForm?.positionKey ?? ''}`}
+              side={row?.side ?? tradeForm?.side ?? 'buy'}
               accounts={accounts}
-              trades={trades}
+              positions={open}
               priceByCode={priceByCode}
               row={row}
-              initialMode={tradeForm?.mode}
-              initialHoldingKey={tradeForm?.holdingKey}
+              initialPositionKey={tradeForm?.positionKey}
               onSave={(values) => saveTrade.mutateAsync(values)}
               onDone={onDone}
               onCancel={onCancel}

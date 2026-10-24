@@ -1,151 +1,148 @@
-import { FX_CODE, type Market, type StockPrice, type Trade } from './types'
+import { FX_CODE, type Market, type StockHolding, type StockPrice, type StockTrade } from './types'
 
 /** 현재 원/달러 환율 (아직 조회 전이면 null) */
 export function currentFx(priceByCode: Map<string, StockPrice>) {
   return priceByCode.get(FX_CODE)?.price ?? null
 }
 
-/**
- * 매매 1건(매수 1회 + 선택적으로 매도)의 계산 결과. 금액은 모두 원화.
- * 미국 주식: 매수금액 = 단가 × 수량 × 매수 환율, 평가금액 = 현재가 × 수량 × 현재 환율
- *           매수 환율을 비워 두면 현재 환율을 써서, 환율 변동은 손익에 넣지 않는다.
- */
-export function calcTrade(t: Trade, priceByCode: Map<string, StockPrice>) {
-  const isUs = t.market === 'US'
-  const fxNow = isUs ? (currentFx(priceByCode) ?? t.buy_fx_rate ?? 0) : 1
-  const fxBuy = isUs ? (t.buy_fx_rate ?? fxNow) : 1
-  const cost = t.buy_price * t.quantity * fxBuy
-  const sold = t.sell_date !== null && t.sell_price !== null
-  // 수수료·세금(fee)은 해당 통화로 입력하므로 원화로 바꾼다
-  if (sold) {
-    const fxSell = isUs ? (t.sell_fx_rate ?? fxNow) : 1
-    const proceeds = t.sell_price! * t.quantity * fxSell - t.fee * fxSell
-    return { cost, sold, value: 0, unrealized: 0, realized: proceeds - cost, currentPrice: null }
-  }
-  const currentPrice = priceByCode.get(t.stock_code)?.price ?? null
-  // 현재가를 모르면 매수가로 평가 (손익 0)
-  const value = (currentPrice ?? t.buy_price) * t.quantity * fxNow
-  return { cost, sold, value, unrealized: value - cost - t.fee * fxBuy, realized: 0, currentPrice }
-}
+/** 계좌+시장+종목코드로 같은 종목을 묶는 키 */
+export const positionKey = (x: { account_id: string; market: Market; stock_code: string }) =>
+  `${x.account_id}:${x.market}:${x.stock_code}`
 
-export type Holding = {
+/** 보유 종목 1개 (직접 넣은 보유분 + 매수 - 매도) */
+export type Position = {
   key: string
   accountId: string
   market: Market
   code: string
   name: string
   quantity: number
-  /** 매수금액 합계 (해당 통화: KR=원, US=달러) — 평균단가 계산용 */
+  /** 남은 수량의 매수원가 (해당 통화, 수수료 제외) — 평균단가 표시용 */
   costLocal: number
-  /** 원화 */
+  /** 남은 수량의 매수원가 (원화, 매수 수수료 포함) */
   cost: number
+  /** 평가금액 (원화) */
   value: number
   unrealized: number
+  /** 이 종목에서 지금까지 판 실현손익 (원화) */
+  realized: number
   /** 해당 통화 현재가 */
   currentPrice: number | null
+  /** 직접 넣은 보유분 (있으면 수정·삭제 가능) */
+  holding: StockHolding | null
 }
 
-/** 아직 팔지 않은 매매를 계좌+종목별로 묶어 보유 현황을 만든다 */
-export function holdings(trades: Trade[], priceByCode: Map<string, StockPrice>): Holding[] {
-  const map = new Map<string, Holding>()
-  for (const t of trades) {
-    const r = calcTrade(t, priceByCode)
-    if (r.sold) continue
-    const key = `${t.account_id}:${t.market}:${t.stock_code}`
-    const h = map.get(key) ?? {
-      key,
-      accountId: t.account_id,
-      market: t.market,
-      code: t.stock_code,
-      name: t.stock_name,
-      quantity: 0,
-      costLocal: 0,
-      cost: 0,
-      value: 0,
-      unrealized: 0,
-      currentPrice: r.currentPrice,
-    }
-    h.quantity += t.quantity
-    h.costLocal += t.buy_price * t.quantity
-    h.cost += r.cost
-    h.value += r.value
-    h.unrealized += r.unrealized
-    map.set(key, h)
-  }
-  return [...map.values()]
-}
-
-export type SellInput = {
-  quantity: number
-  sell_date: string
-  sell_price: number
-  sell_fx_rate: number | null
-  /** 이번 매도의 수수료·세금 (해당 통화) */
-  fee: number
-}
-
-// 소수 주식(미국 소수점 거래)의 계산 오차를 감안한 비교 여유
+// 수량 계산의 소수점 오차 여유 (미국 소수점 거래)
 const EPS = 1e-9
-const round = (v: number, digits: number) => Math.round(v * 10 ** digits) / 10 ** digits
 
 /**
- * 매도 입력을 DB 에 저장할 변경 목록으로 바꾼다. (id 있음 = 수정, 없음 = 새 줄)
- * 매매 내역은 '매수 1번 = 1줄' 구조라서, 먼저 산 줄부터 차례로 매도 정보를 채운다 (선입선출).
- * 한 줄의 일부만 팔면 판 만큼을 새 줄로 떼어 내고 원래 줄은 수량을 줄인다.
- * 매수 수수료는 수량 비율로 나누고, 매도 수수료는 판 수량 비율로 각 줄에 더한다.
+ * 보유 종목과 매수·매도 기록으로 종목별 현황을 계산한다. 금액은 원화.
+ *
+ * 이동평균법: 매수하면 원가가 더해지고, 매도하면 그때의 평균단가 × 판 수량만큼 원가가 빠진다.
+ *   실현손익 = 매도금액 - 매도 수수료 - 평균단가 × 판 수량
+ * 미국 주식은 거래마다 그때 환율로 원화 원가를 쌓으므로 환율 변동도 손익에 들어간다.
+ * 환율을 비워 둔 거래는 현재 환율을 쓴다.
+ *
+ * realizedByTrade: 매도 기록 id → 그 매도의 실현손익 (매매 내역 표시용)
  */
-export function planSell(lots: Trade[], sell: SellInput): Record<string, unknown>[] {
-  // 매수일 순 (같은 날이면 입력한 순서 유지)
-  const sorted = [...lots].sort((a, b) => (a.buy_date ?? '').localeCompare(b.buy_date ?? ''))
-  const soldFields = { sell_date: sell.sell_date, sell_price: sell.sell_price, sell_fx_rate: sell.sell_fx_rate }
-  const sellFee = (quantity: number) => (sell.fee * quantity) / sell.quantity
-  const writes: Record<string, unknown>[] = []
-  let remaining = sell.quantity
-  for (const lot of sorted) {
-    if (remaining <= EPS) break
-    if (lot.quantity <= remaining + EPS) {
-      // 이 줄은 전부 판다
-      writes.push({ id: lot.id, ...soldFields, fee: round(lot.fee + sellFee(lot.quantity), 2) })
-      remaining -= lot.quantity
+export function analyzeInvest(holdings: StockHolding[], trades: StockTrade[], priceByCode: Map<string, StockPrice>) {
+  const fxNow = currentFx(priceByCode)
+  const fxOf = (market: Market, rate: number | null) => (market === 'US' ? (rate ?? fxNow ?? 0) : 1)
+  const map = new Map<string, Position>()
+  const realizedByTrade = new Map<string, number>()
+
+  function get(x: { account_id: string; market: Market; stock_code: string; stock_name: string }) {
+    const key = positionKey(x)
+    let p = map.get(key)
+    if (!p) {
+      p = {
+        key,
+        accountId: x.account_id,
+        market: x.market,
+        code: x.stock_code,
+        name: x.stock_name,
+        quantity: 0,
+        costLocal: 0,
+        cost: 0,
+        value: 0,
+        unrealized: 0,
+        realized: 0,
+        currentPrice: priceByCode.get(x.stock_code)?.price ?? null,
+        holding: null,
+      }
+      map.set(key, p)
+    }
+    return p
+  }
+
+  // 직접 넣은 보유분이 출발점
+  for (const h of holdings) {
+    const p = get(h)
+    p.holding = h
+    p.quantity += h.quantity
+    p.costLocal += h.avg_price * h.quantity
+    p.cost += h.avg_price * h.quantity * fxOf(h.market, h.avg_fx_rate)
+  }
+
+  // 거래는 날짜 순서대로 (날짜 없는 기록은 가장 오래된 것으로)
+  const sorted = [...trades].sort(
+    (a, b) => (a.trade_date ?? '').localeCompare(b.trade_date ?? '') || a.created_at.localeCompare(b.created_at),
+  )
+  for (const t of sorted) {
+    const p = get(t)
+    const fx = fxOf(t.market, t.fx_rate)
+    if (t.side === 'buy') {
+      p.quantity += t.quantity
+      p.costLocal += t.price * t.quantity
+      p.cost += (t.price * t.quantity + t.fee) * fx
     } else {
-      // 일부만 판다: 판 부분을 새 줄로 먼저 만들고 (실패해도 보유 수량이 사라지지 않도록) 원래 줄을 줄인다
-      const buyFee = (lot.fee * remaining) / lot.quantity
-      writes.push({
-        account_id: lot.account_id,
-        market: lot.market,
-        stock_code: lot.stock_code,
-        stock_name: lot.stock_name,
-        buy_date: lot.buy_date,
-        buy_price: lot.buy_price,
-        buy_fx_rate: lot.buy_fx_rate,
-        memo: lot.memo,
-        quantity: round(remaining, 8),
-        ...soldFields,
-        fee: round(buyFee + sellFee(remaining), 2),
-      })
-      writes.push({ id: lot.id, quantity: round(lot.quantity - remaining, 8), fee: round(lot.fee - buyFee, 2) })
-      remaining = 0
+      // 기록이 맞지 않아 보유보다 많이 판 경우에도 가진 만큼만 원가를 뺀다
+      const qty = Math.min(t.quantity, p.quantity)
+      const avgCost = p.quantity > EPS ? p.cost / p.quantity : 0
+      const avgLocal = p.quantity > EPS ? p.costLocal / p.quantity : 0
+      const realized = (t.price * t.quantity - t.fee) * fx - avgCost * qty
+      realizedByTrade.set(t.id, realized)
+      p.realized += realized
+      p.quantity -= qty
+      p.cost -= avgCost * qty
+      p.costLocal -= avgLocal * qty
+      if (p.quantity < EPS) {
+        p.quantity = 0
+        p.cost = 0
+        p.costLocal = 0
+      }
     }
   }
-  return writes
+
+  for (const p of map.values()) {
+    if (p.quantity === 0) continue
+    // 현재가를 모르면 평균단가로 평가 (손익 0)
+    const price = p.currentPrice ?? p.costLocal / p.quantity
+    p.value = price * p.quantity * fxOf(p.market, null)
+    p.unrealized = p.value - p.cost
+  }
+
+  const positions = [...map.values()]
+  return {
+    positions,
+    /** 지금 가지고 있는 종목만 */
+    open: positions.filter((p) => p.quantity > 0),
+    realizedByTrade,
+  }
 }
 
-/** 투자 전체 요약 (원화) */
-export function investSummary(trades: Trade[], priceByCode: Map<string, StockPrice>) {
+/** 종목 현황 합계 (원 단위 반올림) */
+export function investSummary(positions: Position[]) {
   let cost = 0
   let value = 0
   let unrealized = 0
   let realized = 0
-  for (const t of trades) {
-    const r = calcTrade(t, priceByCode)
-    if (r.sold) realized += r.realized
-    else {
-      cost += r.cost
-      value += r.value
-      unrealized += r.unrealized
-    }
+  for (const p of positions) {
+    cost += p.cost
+    value += p.value
+    unrealized += p.unrealized
+    realized += p.realized
   }
-  // 달러 계산이 섞이면 소수점이 생기므로 원 단위로 반올림
   return {
     cost: Math.round(cost),
     value: Math.round(value),
@@ -153,4 +150,10 @@ export function investSummary(trades: Trade[], priceByCode: Map<string, StockPri
     realized: Math.round(realized),
     rate: cost > 0 ? unrealized / cost : 0,
   }
+}
+
+/** 거래 1건의 원화 금액 (단가 × 수량 × 환율) */
+export function tradeAmount(t: StockTrade, priceByCode: Map<string, StockPrice>) {
+  const fx = t.market === 'US' ? (t.fx_rate ?? currentFx(priceByCode) ?? 0) : 1
+  return t.price * t.quantity * fx
 }

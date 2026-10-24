@@ -11,8 +11,9 @@ import type {
   Member,
   NetWorthSnapshot,
   RealAsset,
+  StockHolding,
   StockPrice,
-  Trade,
+  StockTrade,
 } from '../lib/types'
 import { createTableApi } from './createTableApi'
 
@@ -23,10 +24,12 @@ export const membersApi = createTableApi<Member>('members', {
 export const goalsApi = createTableApi<Goal>('goals', { order: [{ column: 'year' }] })
 
 export const investAccountsApi = createTableApi<InvestAccount>('invest_accounts', {
-  alsoInvalidate: [['trades']],
+  alsoInvalidate: [['stock_holdings'], ['stock_trades']],
 })
-export const tradesApi = createTableApi<Trade>('trades', {
-  order: [{ column: 'buy_date', ascending: true }, { column: 'created_at' }],
+export const stockHoldingsApi = createTableApi<StockHolding>('stock_holdings')
+// 날짜가 없는 기록(엑셀에서 옮긴 것)은 가장 오래된 것으로 보고 맨 앞에
+export const stockTradesApi = createTableApi<StockTrade>('stock_trades', {
+  order: [{ column: 'trade_date', ascending: true, nullsFirst: true }, { column: 'created_at' }],
 })
 
 export const bankAccountsApi = createTableApi<BankAccount>('bank_accounts')
