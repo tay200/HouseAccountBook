@@ -1,46 +1,18 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import {
-  investAccountsApi,
-  stockHoldingsApi,
-  stockTradesApi,
-  useRefreshStockPrices,
-  useSaveStockPrice,
-  useStockPrices,
-} from '../api/tables'
+import { useRef, useState } from 'react'
 import { describeCounts } from '../api/counts'
-import AmountInput from '../components/AmountInput'
+import { investAccountsApi, stockHoldingsApi, stockTradesApi, useRefreshStockPrices, useStockPrices } from '../api/tables'
 import CrudTable, { type Column } from '../components/CrudTable'
 import HoldingForm from '../components/HoldingForm'
-import SortHeader from '../components/SortHeader'
+import { ProfitRate, SignedWon, StatCard } from '../components/Numbers'
 import TradeForm from '../components/TradeForm'
 import { useLookups } from '../hooks/useLookups'
-import { useSort } from '../hooks/useSort'
-import { formatNumber, formatUsd, formatWon } from '../lib/format'
-import { analyzeInvest, currentFx, investSummary, oversellProblem, tradeAmount } from '../lib/invest'
-import { FX_CODE, SIDE_LABEL, type InvestAccount, type Market, type StockHolding, type StockPrice, type StockTrade, type TradeSide } from '../lib/types'
-
-/** 해당 통화로 금액 표시 (KR=원, US=달러) */
-function formatLocal(value: number, market: Market) {
-  return market === 'US' ? formatUsd(value) : formatWon(value)
-}
-
-function signed(value: number) {
-  return <span className={value > 0 ? 'text-red-600' : value < 0 ? 'text-blue-600' : ''}>{value > 0 ? '+' : ''}{formatWon(value)}</span>
-}
-
-function rate(value: number, base: number) {
-  if (base === 0) return '-'
-  const r = (value / base) * 100
-  return <span className={r > 0 ? 'text-red-600' : r < 0 ? 'text-blue-600' : ''}>{r > 0 ? '+' : ''}{r.toFixed(2)}%</span>
-}
-
-const marketLabel = (market: Market) => (market === 'US' ? '미국' : '한국')
-
-/** 매수는 빨강, 매도는 파랑 */
-function SideBadge({ side }: { side: TradeSide }) {
-  const color = side === 'buy' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
-  return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${color}`}>{SIDE_LABEL[side]}</span>
-}
+import { formatNumber, formatWon } from '../lib/format'
+import { analyzeInvest, investSummary, isIncluded, oversellProblem } from '../lib/invest'
+import { FX_CODE, SIDE_LABEL, type InvestAccount, type Market, type StockHolding, type StockTrade, type TradeSide } from '../lib/types'
+import AccountSummaryCard from './invest/AccountSummaryCard'
+import HoldingsTable from './invest/HoldingsTable'
+import PriceCell from './invest/PriceCell'
+import { tradeColumns } from './invest/tradeColumns'
 
 export default function InvestPage() {
   const { data: accounts = [] } = investAccountsApi.useList()
@@ -72,7 +44,11 @@ export default function InvestPage() {
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
   const { positions, open, realizedByTrade, oversold } = analyzeInvest(stockHoldings, trades, priceByCode)
   const fxMissing = open.some((p) => p.fxMissing)
-  const closed = positions.filter((p) => p.quantity === 0)
+
+  // 계좌별 현황에서 체크한 계좌만 위쪽 합계에 넣는다 (예: 연금 계좌 제외)
+  const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
+  const summary = investSummary(positions.filter((p) => includedIds.has(p.accountId)))
+  const lastUpdated = prices.reduce((latest, p) => (p.updated_at > latest ? p.updated_at : latest), '')
 
   /** 매수 기록·보유분을 지웠을 때 뒤의 매도가 가진 수량을 넘게 되면 막는다 */
   function confirmRemove(next: { holdings?: StockHolding[]; trades?: StockTrade[] }, question: string) {
@@ -113,48 +89,6 @@ export default function InvestPage() {
     return confirm(`'${a.name}' 계좌를 삭제할까요?${effect}`)
   }
 
-  // 보유 종목 표 머리글 정렬. 단가는 한국·미국 종목을 같이 비교할 수 있게 원화로
-  const fxNow = currentFx(priceByCode) ?? 0
-  const holdingSort = useSort(open, (p, key) => {
-    switch (key) {
-      case 'account': return accountName(p.accountId)
-      case 'name': return p.name
-      case 'quantity': return p.quantity
-      case 'avg': return p.cost / p.quantity
-      case 'price': return p.currentPrice === null ? null : p.currentPrice * (p.market === 'US' ? fxNow : 1)
-      case 'value': return p.value
-      case 'unrealized': return p.unrealized
-      case 'rate': return p.cost > 0 ? p.unrealized / p.cost : null
-    }
-  })
-  const holdingHeaders: { key: string; label: string; align?: 'right' }[] = [
-    { key: 'account', label: '계좌' },
-    { key: 'name', label: '종목' },
-    { key: 'quantity', label: '수량', align: 'right' },
-    { key: 'avg', label: '평균단가', align: 'right' },
-    { key: 'price', label: '현재가', align: 'right' },
-    { key: 'value', label: '평가금액', align: 'right' },
-    { key: 'unrealized', label: '평가손익', align: 'right' },
-    { key: 'rate', label: '수익률', align: 'right' },
-  ]
-
-  // 계좌별 현황에서 체크한 계좌만 위쪽 합계에 넣는다 (예: 연금 계좌 제외)
-  const isIncluded = (a: InvestAccount) => a.included !== false
-  const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
-  const summary = investSummary(positions.filter((p) => includedIds.has(p.accountId)))
-  const allIncluded = accounts.length > 0 && accounts.every(isIncluded)
-
-  function toggleAccount(a: InvestAccount) {
-    saveAccount.mutate({ id: a.id, included: !isIncluded(a) })
-  }
-
-  function toggleAll() {
-    for (const a of accounts) {
-      if (isIncluded(a) === allIncluded) saveAccount.mutate({ id: a.id, included: !allIncluded })
-    }
-  }
-  const lastUpdated = prices.reduce((latest, p) => (p.updated_at > latest ? p.updated_at : latest), '')
-
   function handleRefresh() {
     const codesOf = (market: Market) => [...new Set(open.filter((p) => p.market === market).map((p) => p.code))]
     refresh.mutate({ kr: codesOf('KR'), us: codesOf('US') }, {
@@ -164,69 +98,8 @@ export default function InvestPage() {
     })
   }
 
-  const dash = <span className="text-slate-300">-</span>
-  // 입력은 TradeForm 이 맡으므로 여기 열들은 표시용
-  const tradeColumns: Column<StockTrade>[] = [
-    {
-      key: 'side',
-      label: '구분',
-      render: (t) => (
-        <>
-          <SideBadge side={t.side} />
-          {oversold.has(t.id) && (
-            <span
-              className="ml-1 cursor-help text-xs text-amber-600"
-              title={`이 매도 시점에 가진 수량은 ${formatNumber(oversold.get(t.id)!)}주예요. 넘게 판 수량은 손익 계산에서 뺐어요. 날짜나 수량을 확인해 주세요.`}
-            >
-              ⚠ 수량 초과
-            </span>
-          )}
-        </>
-      ),
-      sortValue: (t) => SIDE_LABEL[t.side],
-    },
-    { key: 'trade_date', label: '날짜' },
-    { key: 'account_id', label: '계좌', render: (t) => accountName(t.account_id), sortValue: (t) => accountName(t.account_id) },
-    { key: 'market', label: '시장', render: (t) => marketLabel(t.market), sortValue: (t) => marketLabel(t.market) },
-    { key: 'stock_code', label: '종목코드' },
-    { key: 'stock_name', label: '종목명' },
-    { key: 'price', label: '단가', align: 'right', render: (t) => formatLocal(t.price, t.market) },
-    { key: 'quantity', label: '수량', align: 'right', render: (t) => formatNumber(t.quantity) },
-    {
-      key: 'fx_rate',
-      label: '환율',
-      align: 'right',
-      render: (t) =>
-        t.market !== 'US' ? (
-          dash
-        ) : t.fx_rate ? (
-          formatNumber(t.fx_rate)
-        ) : (
-          <span className="cursor-help text-amber-600" title="환율이 비어 있어 현재 환율로 계산 중이에요. [수정]에서 거래 당시 환율을 넣어 주세요.">
-            환율 없음
-          </span>
-        ),
-    },
-    { key: 'fee', label: '수수료·세금', align: 'right', render: (t) => formatLocal(t.fee, t.market) },
-    {
-      key: 'amount',
-      label: '거래금액(원)',
-      align: 'right',
-      render: (t) => formatWon(Math.round(tradeAmount(t, priceByCode))),
-      sortValue: (t) => tradeAmount(t, priceByCode),
-    },
-    {
-      key: 'realized',
-      label: '실현손익',
-      align: 'right',
-      render: (t) => (t.side === 'sell' ? signed(Math.round(realizedByTrade.get(t.id) ?? 0)) : dash),
-      sortValue: (t) => (t.side === 'sell' ? (realizedByTrade.get(t.id) ?? 0) : null),
-    },
-    { key: 'memo', label: '메모' },
-  ]
-
   const accountColumns: Column<InvestAccount>[] = [
-    { key: 'name', label: '계좌 이름', input: { type: 'text', placeholder: '예: 진석ISA' }, required: true },
+    { key: 'name', label: '계좌 이름', input: { type: 'text', placeholder: '예: 홍길동 ISA' }, required: true },
     {
       key: 'member_id',
       label: '사람',
@@ -264,70 +137,21 @@ export default function InvestPage() {
       )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="보유 매수금액" value={formatWon(summary.cost)} />
-        <Stat label="평가금액" value={formatWon(summary.value)} />
-        <Stat label="평가손익" value={<>{signed(summary.unrealized)} <span className="text-sm">({rate(summary.unrealized, summary.cost)})</span></>} />
-        <Stat label="실현손익" value={signed(summary.realized)} />
+        <StatCard label="보유 매수금액" value={formatWon(summary.cost)} />
+        <StatCard label="평가금액" value={formatWon(summary.value)} />
+        <StatCard
+          label="평가손익"
+          value={
+            <>
+              <SignedWon value={summary.unrealized} />{' '}
+              <span className="text-sm">(<ProfitRate value={summary.unrealized} base={summary.cost} />)</span>
+            </>
+          }
+        />
+        <StatCard label="실현손익" value={<SignedWon value={summary.realized} />} />
       </div>
 
-      <div className="card">
-        <h3 className="mb-1 font-semibold">계좌별 현황</h3>
-        <p className="mb-4 text-xs text-slate-500">체크한 계좌만 위쪽 합계에 들어가요. 연금처럼 따로 보고 싶은 계좌는 체크를 풀어 두세요.</p>
-        <table className="w-full text-sm tabular-nums">
-          <thead className="border-b border-slate-200 text-xs text-slate-500">
-            <tr>
-              <th className="w-8 py-2 text-left">
-                <input type="checkbox" className="size-4 cursor-pointer" checked={allIncluded} onChange={toggleAll} aria-label="전체 선택" />
-              </th>
-              <th className="py-2 text-left font-medium">계좌</th>
-              <th className="py-2 text-right font-medium">종목 수</th>
-              <th className="py-2 text-right font-medium">매수금액</th>
-              <th className="py-2 text-right font-medium">평가금액</th>
-              <th className="py-2 text-right font-medium">평가손익</th>
-              <th className="py-2 text-right font-medium">수익률</th>
-              <th className="py-2 text-right font-medium">비중</th>
-              <th className="py-2 text-right font-medium">실현손익</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {accounts.map((a) => {
-              const s = investSummary(positions.filter((p) => p.accountId === a.id))
-              const count = open.filter((p) => p.accountId === a.id).length
-              const included = isIncluded(a)
-              return (
-                <tr key={a.id} className={included ? '' : 'text-slate-400'}>
-                  <td className="py-2">
-                    <input type="checkbox" className="size-4 cursor-pointer" checked={included} onChange={() => toggleAccount(a)} aria-label={`${a.name} 합계에 포함`} />
-                  </td>
-                  <td className="py-2">{a.name}</td>
-                  <td className="py-2 text-right">{count}</td>
-                  <td className="py-2 text-right">{formatWon(s.cost)}</td>
-                  <td className="py-2 text-right">{formatWon(s.value)}</td>
-                  <td className="py-2 text-right">{included ? signed(s.unrealized) : formatWon(s.unrealized)}</td>
-                  <td className="py-2 text-right">{included ? rate(s.unrealized, s.cost) : '-'}</td>
-                  <td className="py-2 text-right text-slate-500">
-                    {included && summary.value > 0 ? `${Math.round((s.value / summary.value) * 100)}%` : '-'}
-                  </td>
-                  <td className="py-2 text-right">{included ? signed(s.realized) : formatWon(s.realized)}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-          <tfoot className="border-t border-slate-300 font-semibold">
-            <tr>
-              <td />
-              <td className="py-2">선택 합계</td>
-              <td className="py-2 text-right">{open.filter((p) => includedIds.has(p.accountId)).length}</td>
-              <td className="py-2 text-right">{formatWon(summary.cost)}</td>
-              <td className="py-2 text-right">{formatWon(summary.value)}</td>
-              <td className="py-2 text-right">{signed(summary.unrealized)}</td>
-              <td className="py-2 text-right">{rate(summary.unrealized, summary.cost)}</td>
-              <td className="py-2 text-right text-slate-500">{summary.value > 0 ? '100%' : '-'}</td>
-              <td className="py-2 text-right">{signed(summary.realized)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      <AccountSummaryCard accounts={accounts} positions={positions} summary={summary} />
 
       <div className="card">
         <div className="mb-1 flex items-center justify-between">
@@ -344,10 +168,10 @@ export default function InvestPage() {
         </p>
         {holdingForm !== null && (
           <HoldingForm
-            trades={trades}
             key={holdingForm === 'new' ? 'new' : holdingForm.id}
             accounts={accounts}
             holdings={stockHoldings}
+            trades={trades}
             priceByCode={priceByCode}
             row={holdingForm === 'new' ? undefined : holdingForm}
             onSave={(values) => saveHolding.mutateAsync(values)}
@@ -355,79 +179,14 @@ export default function InvestPage() {
             onCancel={() => setHoldingForm(null)}
           />
         )}
-        <table className="w-full text-sm tabular-nums">
-          <thead className="border-b border-slate-200 text-xs text-slate-500">
-            <tr>
-              {holdingHeaders.map((h) => (
-                <SortHeader
-                  key={h.key}
-                  label={h.label}
-                  sortKey={h.key}
-                  sort={holdingSort.sort}
-                  onToggle={holdingSort.toggle}
-                  align={h.align}
-                />
-              ))}
-              <th className="w-44" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {holdingSort.sorted.map((p) => {
-              const avg = p.costLocal / p.quantity
-              return (
-                <tr key={p.key} className={holdingForm !== null && holdingForm !== 'new' && holdingForm.id === p.holding?.id ? 'bg-blue-50' : ''}>
-                  <td className="py-2">{accountName(p.accountId)}</td>
-                  <td className="py-2">
-                    {p.market === 'US' && <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-500">US</span>}
-                    {p.name} <span className="text-xs text-slate-400">{p.code}</span>
-                  </td>
-                  <td className="py-2 text-right">{formatNumber(p.quantity)}</td>
-                  <td className="py-2 text-right">{formatLocal(p.market === 'US' ? avg : Math.round(avg), p.market)}</td>
-                  <td className="py-2 text-right">
-                    <PriceCell code={p.code} price={priceByCode.get(p.code)} market={p.market} format={(v) => formatLocal(v, p.market)} />
-                  </td>
-                  {p.fxMissing ? (
-                    // 현재 환율을 몰라 평가할 수 없음 (0원으로 보이면 손실처럼 보이므로)
-                    <td colSpan={3} className="py-2 text-right text-amber-600">환율 필요</td>
-                  ) : (
-                    <>
-                      <td className="py-2 text-right">{formatWon(Math.round(p.value))}</td>
-                      <td className="py-2 text-right">{signed(Math.round(p.unrealized))}</td>
-                      <td className="py-2 text-right">{rate(p.unrealized, p.cost)}</td>
-                    </>
-                  )}
-                  <td className="py-2 text-right whitespace-nowrap">
-                    <button className="btn btn-text text-blue-600" onClick={() => startTrade('sell', p.key)}>매도</button>
-                    {/* 직접 넣은 보유분이 있는 종목만 수정·삭제 (매매 기록은 매매 내역에서) */}
-                    {p.holding && holdingButtons(p.holding)}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        {open.length === 0 && <p className="py-6 text-center text-sm text-slate-400">보유 종목이 없어요.</p>}
-        {closed.length > 0 && (
-          // 다 판 종목: 실현손익을 보고, 직접 넣었던 보유분이 있으면 여기서 고치거나 지울 수 있다
-          <details className="mt-4 rounded-lg border border-slate-200 px-4 py-2">
-            <summary className="cursor-pointer text-sm text-slate-600">청산 종목 {closed.length}개 (다 판 종목)</summary>
-            <table className="mt-2 w-full text-sm tabular-nums">
-              <tbody className="divide-y divide-slate-100">
-                {closed.map((p) => (
-                  <tr key={p.key}>
-                    <td className="py-2">{accountName(p.accountId)}</td>
-                    <td className="py-2">
-                      {p.market === 'US' && <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-500">US</span>}
-                      {p.name} <span className="text-xs text-slate-400">{p.code}</span>
-                    </td>
-                    <td className="py-2 text-right">실현손익 {signed(Math.round(p.realized))}</td>
-                    <td className="w-44 py-2 text-right whitespace-nowrap">{p.holding && holdingButtons(p.holding)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </details>
-        )}
+        <HoldingsTable
+          positions={positions}
+          priceByCode={priceByCode}
+          accountName={accountName}
+          editingHoldingId={holdingForm !== null && holdingForm !== 'new' ? holdingForm.id : undefined}
+          onSell={(key) => startTrade('sell', key)}
+          holdingButtons={holdingButtons}
+        />
       </div>
 
       <div className="card scroll-mt-4" ref={tradesCardRef}>
@@ -449,7 +208,7 @@ export default function InvestPage() {
         </p>
         <CrudTable
           rows={trades}
-          columns={tradeColumns}
+          columns={tradeColumns({ accountName, priceByCode, realizedByTrade, oversold })}
           onSave={(values) => saveTrade.mutateAsync(values)}
           onDelete={(id) => deleteTrade.mutate(id)}
           confirmDelete={(t) => confirmRemove({ trades: trades.filter((x) => x.id !== t.id) }, `${SIDE_LABEL[t.side]} 기록을 삭제할까요?`)}
@@ -488,62 +247,4 @@ export default function InvestPage() {
       </div>
     </section>
   )
-}
-
-function Stat({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="card">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold tabular-nums">{value}</p>
-    </div>
-  )
-}
-
-type PriceCellProps = {
-  code: string
-  price: StockPrice | undefined
-  /** US 면 소수점(달러, 환율) 입력 */
-  market: Market
-  format: (value: number) => string
-}
-
-/** 클릭하면 입력칸으로 바뀌는 현재가 칸 */
-function PriceCell({ code, price, market, format }: PriceCellProps) {
-  const save = useSaveStockPrice()
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState<number | null>(price?.price ?? null)
-  // Esc 로 닫을 때는 저장하지 않는다
-  const cancelled = useRef(false)
-
-  if (!editing) {
-    return (
-      <button className="rounded px-1 hover:bg-slate-100" onClick={() => { setValue(price?.price ?? null); cancelled.current = false; setEditing(true) }}>
-        {price ? format(price.price) : <span className="text-amber-600">입력 필요</span>}
-      </button>
-    )
-  }
-  // Enter 를 누르거나 다른 곳을 클릭하면 저장 (값이 바뀌었을 때만)
-  function commit() {
-    if (!cancelled.current && value && value > 0 && value !== price?.price) save.mutate({ stock_code: code, price: value })
-    setEditing(false)
-  }
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') cancelled.current = true
-    if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
-  }
-  if (market === 'US') {
-    return (
-      <input
-        type="number"
-        step="any"
-        autoFocus
-        className="input w-28 py-1 text-right"
-        value={value ?? ''}
-        onChange={(e) => setValue(e.target.value === '' ? null : Number(e.target.value))}
-        onKeyDown={handleKeyDown}
-        onBlur={commit}
-      />
-    )
-  }
-  return <AmountInput autoFocus className="w-28 py-1" value={value} onChange={setValue} onKeyDown={handleKeyDown} onBlur={commit} />
 }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase'
+import { untypedDb as supabase, type TableName } from '../lib/supabase'
 import { fetchAll } from './fetchAll'
 
 type Options = {
@@ -18,7 +18,7 @@ type Options = {
  *   export const depositsApi = createTableApi<Deposit>('deposits')
  *   const { data } = depositsApi.useList()
  */
-export function createTableApi<Row extends { id: string }>(table: string, options: Options = {}) {
+export function createTableApi<Row extends { id: string }>(table: TableName, options: Options = {}) {
   const key = [table]
   const { select = '*', order = [{ column: 'created_at' }], alsoInvalidate = [] } = options
 

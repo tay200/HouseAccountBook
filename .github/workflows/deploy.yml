@@ -25,6 +25,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # 코드 검사와 계산 테스트가 실패하면 여기서 멈춰서 잘못된 버전이 배포되지 않는다
+      - run: npm run lint
+      - run: npm test
       - run: npm run build
         env:
           # 저장소 Settings → Secrets and variables → Actions → Variables 탭에 등록한 값

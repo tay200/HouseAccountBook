@@ -1,7 +1,7 @@
-import { supabase } from '../lib/supabase'
+import { untypedDb as supabase, type TableName } from '../lib/supabase'
 
 /** table 에서 column 이 ids 중 하나인 행 개수 (삭제 전 '함께 바뀌는 기록 N건' 안내용) */
-export async function countRows(table: string, column: string, ids: string[]) {
+export async function countRows(table: TableName, column: string, ids: string[]) {
   if (ids.length === 0) return 0
   // head: true = 행 내용은 받지 않고 개수만 받는다
   const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true }).in(column, ids)

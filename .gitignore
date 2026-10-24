@@ -25,3 +25,6 @@ dist-ssr
 
 # 개인 데이터 (엑셀에서 가져온 SQL 등) - 공개 저장소에 올리지 않음
 private/
+
+# Supabase CLI 가 만드는 임시 파일
+supabase/.temp/

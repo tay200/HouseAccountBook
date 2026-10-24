@@ -16,7 +16,7 @@ begin
 end $$;
 
 -- ─────────────────────────────────────────────
--- 사람 (공동 / 진석 / 민정 …). 거래의 member_id 가 비어 있으면 '공동'으로 본다.
+-- 사람 (공동 / 남편 / 아내 …). 거래의 member_id 가 비어 있으면 '공동'으로 본다.
 -- ─────────────────────────────────────────────
 create table public.members (
   id uuid primary key default gen_random_uuid(),

@@ -1,11 +1,11 @@
 import { strToU8, zipSync } from 'fflate'
 import { BOM, toCsv } from '../lib/csv'
-import { supabase } from '../lib/supabase'
+import { untypedDb as supabase, type TableName } from '../lib/supabase'
 import { todayString } from '../lib/format'
 import { fetchAll } from './fetchAll'
 
 /** 백업할 테이블: [DB 이름, 파일 설명, 정렬 기준(고유)] */
-const TABLES: [table: string, label: string, orderBy: string][] = [
+const TABLES: [table: TableName, label: string, orderBy: string][] = [
   ['transactions', '거래 내역', 'id'],
   ['categories', '카테고리', 'id'],
   ['payment_methods', '결제수단', 'id'],

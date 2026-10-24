@@ -1,4 +1,7 @@
-import { FX_CODE, type Market, type StockHolding, type StockPrice, type StockTrade } from './types'
+import { FX_CODE, type InvestAccount, type Market, type StockHolding, type StockPrice, type StockTrade } from './types'
+
+/** 투자 탭 합계에 넣는 계좌인지 ('합계 포함' 체크. 예전 데이터는 값이 없으면 포함) */
+export const isIncluded = (a: InvestAccount) => a.included !== false
 
 /** 현재 원/달러 환율 (아직 조회 전이면 null) */
 export function currentFx(priceByCode: Map<string, StockPrice>) {

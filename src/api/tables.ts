@@ -90,7 +90,7 @@ export function useRefreshStockPrices() {
       })
       if (error) throw error
       const results = data?.results ?? []
-      const ok = results.filter((r) => typeof r.price === 'number')
+      const ok = results.filter((r): r is PriceResult & { price: number } => typeof r.price === 'number')
       if (ok.length > 0) {
         const now = new Date().toISOString()
         const { error: saveError } = await supabase

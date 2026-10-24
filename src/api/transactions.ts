@@ -12,8 +12,9 @@ export function useTransactions(fromMonth: string, toMonth: string) {
   return useQuery({
     queryKey: ['transactions', fromMonth, toMonth],
     // 1년치(연간 리포트)는 1000건을 넘을 수 있어서 나눠 받는다
-    queryFn: () =>
-      fetchAll<Transaction>((from, to) =>
+    // DB 타입은 type·kind 를 그냥 문자열로 알기 때문에, 우리가 아는 좁은 타입(Transaction)으로 바꿔 쓴다
+    queryFn: async () =>
+      (await fetchAll((from, to) =>
         supabase
           .from('transactions')
           .select('id, date, type, kind, amount, discount, category_id, payment_method_id, member_id, memo')
@@ -23,7 +24,7 @@ export function useTransactions(fromMonth: string, toMonth: string) {
           .order('created_at', { ascending: false })
           .order('id')
           .range(from, to),
-      ),
+      )) as Transaction[],
   })
 }
 
