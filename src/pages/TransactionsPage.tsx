@@ -74,7 +74,16 @@ export default function TransactionsPage() {
         </p>
       )}
 
-      <TransactionForm key={editing?.id ?? 'new'} editing={editing} onDone={() => setEditing(null)} />
+      <TransactionForm
+        key={editing?.id ?? `new-${month}`}
+        month={month}
+        editing={editing}
+        onDone={() => setEditing(null)}
+        onSaved={(date) => {
+          // 다른 달 날짜로 저장했으면 그 달로 이동해서 방금 저장한 거래가 보이게 한다
+          if (!date.startsWith(month)) setMonth(date.slice(0, 7))
+        }}
+      />
 
       <div className="card space-y-4">
         <div className="flex flex-wrap gap-2">

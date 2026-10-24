@@ -129,7 +129,7 @@ function SummaryTab() {
   }
 
   const snapshotColumns: Column<NetWorthSnapshot>[] = [
-    { key: 'year', label: '연도', input: { type: 'number', step: '1' }, required: true },
+    { key: 'year', label: '연도', input: { type: 'number', step: '1' }, required: true, render: (s) => `${s.year}년` },
     { key: 'amount', label: '순자산', input: { type: 'money' }, required: true, align: 'right' },
     {
       key: 'change',

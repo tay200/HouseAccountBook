@@ -6,14 +6,24 @@ import { KIND_LABEL, KINDS_BY_TYPE, type Transaction, type TxKind, type TxType }
 import AmountInput from './AmountInput'
 
 type Props = {
+  /** 화면에서 보고 있는 달 'YYYY-MM'. 새 거래의 기본 날짜를 이 달로 맞춘다. */
+  month: string
   /** 수정 중인 거래. null 이면 새 거래 입력 모드 */
   editing: Transaction | null
   onDone: () => void
+  /** 저장이 끝난 뒤 저장된 날짜를 알려준다 (보고 있는 달과 다르면 화면을 그 달로 옮기기 위해) */
+  onSaved: (date: string) => void
+}
+
+/** 이번 달을 보고 있으면 오늘, 다른 달이면 그 달 1일 */
+function defaultDate(month: string) {
+  const today = todayString()
+  return today.startsWith(month) ? today : `${month}-01`
 }
 
 // 부모가 key 를 바꿔주면 이 컴포넌트가 새로 만들어지면서 useState 초기값이 다시 적용된다.
-// (수정할 거래를 바꿀 때 폼 내용을 갈아끼우는 가장 간단한 방법)
-export default function TransactionForm({ editing, onDone }: Props) {
+// (수정할 거래나 보고 있는 달이 바뀔 때 폼 내용을 갈아끼우는 가장 간단한 방법)
+export default function TransactionForm({ month, editing, onDone, onSaved }: Props) {
   const { categories, majorCategories, paymentMethods, members, categoryById } = useLookups()
 
   // 수정 모드면 저장된 카테고리에서 대분류/소분류를 거꾸로 찾아낸다
@@ -23,7 +33,7 @@ export default function TransactionForm({ editing, onDone }: Props) {
 
   const [type, setType] = useState<TxType>(editing?.type ?? 'expense')
   const [kind, setKind] = useState<TxKind>(editing?.kind ?? 'variable')
-  const [date, setDate] = useState(editing?.date ?? todayString())
+  const [date, setDate] = useState(editing?.date ?? defaultDate(month))
   const [memberId, setMemberId] = useState(editing?.member_id ?? '')
   const [majorId, setMajorId] = useState(initialMajor)
   const [subId, setSubId] = useState(initialSub)
@@ -64,6 +74,7 @@ export default function TransactionForm({ editing, onDone }: Props) {
       },
       {
         onSuccess: () => {
+          onSaved(date)
           if (editing) {
             onDone()
           } else {
