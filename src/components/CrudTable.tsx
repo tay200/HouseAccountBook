@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatNumber, formatWon } from '../lib/format'
 import AmountInput from './AmountInput'
 
@@ -36,6 +36,12 @@ type Props<T extends { id: string }> = {
   emptyText?: string
   /** 행 아래에 펼쳐서 보여줄 상세 내용 (예: 대출 상환 스케줄) */
   renderDetail?: (row: T) => ReactNode
+  /**
+   * 새 행 입력 중인지 바깥에서 제어하고 싶을 때 (예: 표 바깥의 '+ 추가' 버튼).
+   * 넘기지 않으면 표가 스스로 관리하고 아래쪽에 '+ 추가' 버튼을 보여준다.
+   */
+  adding?: boolean
+  onAddingChange?: (adding: boolean) => void
 }
 
 function display(value: unknown, input?: FieldInput): ReactNode {
@@ -54,8 +60,9 @@ function display(value: unknown, input?: FieldInput): ReactNode {
 }
 
 /**
- * 목록을 표로 보여주고, 행마다 [수정]/[삭제], 맨 아래 [+ 추가]를 제공하는 공용 표.
+ * 목록을 표로 보여주고, 행마다 [수정]/[삭제], [+ 추가]를 제공하는 공용 표.
  * 열 정의(columns)만 바꿔서 예금, 적금, 대출, 매매 내역 등 여러 화면에서 재사용한다.
+ * 새 행 입력 줄은 목록이 길어도 바로 보이도록 표 맨 위에 연다.
  */
 export default function CrudTable<T extends { id: string }>({
   rows,
@@ -66,61 +73,79 @@ export default function CrudTable<T extends { id: string }>({
   addLabel = '+ 추가',
   emptyText = '아직 항목이 없어요.',
   renderDetail,
+  adding: addingProp,
+  onAddingChange,
 }: Props<T>) {
-  // 지금 수정 중인 행 id ('new' = 새 행 추가 중)
+  // 지금 수정 중인 기존 행 id
   const [editingId, setEditingId] = useState<string | null>(null)
   const [openDetailId, setOpenDetailId] = useState<string | null>(null)
+  // 새 행 입력 중인지: 바깥에서 adding 을 넘기면 그 값을, 아니면 내부 상태를 쓴다
+  const [addingState, setAddingState] = useState(false)
+  const controlled = addingProp !== undefined
+  const adding = controlled ? addingProp : addingState
+  const setAdding = (value: boolean) => (onAddingChange ?? setAddingState)(value)
+
+  // 새 항목 추가와 기존 항목 수정은 동시에 하나만 연다
+  const editingRow = adding ? undefined : rows.find((r) => r.id === editingId)
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="border-b border-slate-200 text-left text-xs text-slate-500">
-          <tr>
-            {columns.map((c) => (
-              <th key={c.key} className={`py-2 pr-3 font-medium whitespace-nowrap ${c.align === 'right' ? 'text-right' : ''}`} style={{ width: c.width }}>
-                {c.label}
-              </th>
-            ))}
-            <th className="w-28" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {rows.map((row) =>
-            editingId === row.id ? (
-              <EditRow
-                key={row.id}
-                columns={columns}
-                initial={row as unknown as Values}
-                onCancel={() => setEditingId(null)}
-                onSave={(values) => onSave({ ...values, id: row.id }).then(() => setEditingId(null))}
-              />
-            ) : (
+    <div>
+      {adding && (
+        <EditForm
+          key="new"
+          title="새 항목"
+          columns={columns}
+          initial={defaults}
+          onCancel={() => setAdding(false)}
+          onSave={(values) => onSave(values).then(() => setAdding(false))}
+        />
+      )}
+      {editingRow && (
+        <EditForm
+          key={editingRow.id}
+          title="수정"
+          columns={columns}
+          initial={editingRow as unknown as Values}
+          onCancel={() => setEditingId(null)}
+          onSave={(values) => onSave({ ...values, id: editingRow.id }).then(() => setEditingId(null))}
+        />
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="border-b border-slate-200 text-left text-xs text-slate-500">
+            <tr>
+              {columns.map((c) => (
+                <th key={c.key} className={`py-2 pr-3 font-medium whitespace-nowrap ${c.align === 'right' ? 'text-right' : ''}`} style={{ width: c.width }}>
+                  {c.label}
+                </th>
+              ))}
+              <th className="w-28" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((row) => (
               <DisplayRow
                 key={row.id}
                 row={row}
                 columns={columns}
+                highlighted={editingRow?.id === row.id}
                 detailOpen={openDetailId === row.id}
                 hasDetail={!!renderDetail}
                 onToggleDetail={() => setOpenDetailId(openDetailId === row.id ? null : row.id)}
-                onEdit={() => setEditingId(row.id)}
+                onEdit={() => {
+                  setAdding(false)
+                  setEditingId(row.id)
+                }}
                 onDelete={() => confirm('삭제할까요?') && onDelete(row.id)}
                 detail={renderDetail && openDetailId === row.id ? renderDetail(row) : null}
               />
-            ),
-          )}
-          {editingId === 'new' && (
-            <EditRow
-              columns={columns}
-              initial={defaults}
-              onCancel={() => setEditingId(null)}
-              onSave={(values) => onSave(values).then(() => setEditingId(null))}
-            />
-          )}
-        </tbody>
-      </table>
-      {rows.length === 0 && editingId !== 'new' && <p className="py-6 text-center text-sm text-slate-400">{emptyText}</p>}
-      {editingId !== 'new' && (
-        <button className="btn btn-text mt-2" onClick={() => setEditingId('new')}>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && <p className="py-6 text-center text-sm text-slate-400">{emptyText}</p>}
+      {!controlled && !adding && (
+        <button className="btn btn-secondary mt-3" onClick={() => setAdding(true)}>
           {addLabel}
         </button>
       )}
@@ -131,6 +156,8 @@ export default function CrudTable<T extends { id: string }>({
 type DisplayRowProps<T> = {
   row: T
   columns: Column<T>[]
+  /** 위쪽 폼에서 수정 중인 행 */
+  highlighted: boolean
   hasDetail: boolean
   detailOpen: boolean
   detail: ReactNode
@@ -139,11 +166,11 @@ type DisplayRowProps<T> = {
   onDelete: () => void
 }
 
-function DisplayRow<T>({ row, columns, hasDetail, detailOpen, detail, onToggleDetail, onEdit, onDelete }: DisplayRowProps<T>) {
+function DisplayRow<T>({ row, columns, highlighted, hasDetail, detailOpen, detail, onToggleDetail, onEdit, onDelete }: DisplayRowProps<T>) {
   const values = row as unknown as Values
   return (
     <>
-      <tr className="hover:bg-slate-50">
+      <tr className={highlighted ? 'bg-blue-50' : 'hover:bg-slate-50'}>
         {columns.map((c) => (
           <td key={c.key} className={`py-2.5 pr-3 whitespace-nowrap ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
             {c.render ? c.render(row) : display(values[c.key], c.input)}
@@ -170,14 +197,24 @@ function DisplayRow<T>({ row, columns, hasDetail, detailOpen, detail, onToggleDe
   )
 }
 
-type EditRowProps<T> = {
+type EditFormProps<T> = {
+  title: string
   columns: Column<T>[]
   initial: Values
   onSave: (values: Values) => Promise<unknown>
   onCancel: () => void
 }
 
-function EditRow<T>({ columns, initial, onSave, onCancel }: EditRowProps<T>) {
+/**
+ * 추가/수정 폼. 표 줄 안에 넣으면 칸이 많은 표(매매 내역 등)에서 저장 버튼이 화면 밖으로 밀려나므로
+ * 표 위쪽에 이름표가 붙은 입력칸들을 여러 줄로 배치한다.
+ */
+function EditForm<T>({ title, columns, initial, onSave, onCancel }: EditFormProps<T>) {
+  const formRef = useRef<HTMLDivElement>(null)
+  // 목록 아래쪽 행의 [수정]을 눌러도 폼이 보이도록 화면을 폼으로 옮긴다
+  useEffect(() => {
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [])
   const editable = columns.filter((c) => c.input)
   // 입력 중인 값. 숫자도 입력하는 동안은 문자열로 들고 있다가 저장할 때 변환한다.
   const [draft, setDraft] = useState<Values>(() =>
@@ -208,21 +245,25 @@ function EditRow<T>({ columns, initial, onSave, onCancel }: EditRowProps<T>) {
   }
 
   return (
-    <tr className="bg-blue-50/50">
-      {columns.map((c) => (
-        <td key={c.key} className="py-2 pr-2 align-top">
-          {c.input ? (
-            <FieldEditor input={c.input} value={draft[c.key]} onChange={(v) => set(c.key, v)} />
-          ) : (
-            <span className="text-xs text-slate-400">자동</span>
-          )}
-        </td>
-      ))}
-      <td className="py-2 text-right whitespace-nowrap">
-        <button className="btn btn-primary px-3 py-1.5" disabled={missing || saving} onClick={handleSave}>저장</button>
-        <button className="btn btn-text" onClick={onCancel}>취소</button>
-      </td>
-    </tr>
+    <div ref={formRef} className="edit-form mb-4 scroll-mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-4">
+      <p className="mb-3 text-sm font-semibold text-blue-800">{title}</p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+        {editable.map((c) => (
+          <label key={c.key} className="space-y-1">
+            <span className="text-xs text-slate-500">
+              {c.label}
+              {c.required && <span className="text-red-500"> *</span>}
+            </span>
+            <FieldEditor input={c.input!} value={draft[c.key]} onChange={(v) => set(c.key, v)} />
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-2">
+        {missing && <span className="text-xs text-slate-500">* 표시 칸을 채워 주세요</span>}
+        <button className="btn btn-secondary" onClick={onCancel}>취소</button>
+        <button className="btn btn-primary" disabled={missing || saving} onClick={handleSave}>저장</button>
+      </div>
+    </div>
   )
 }
 

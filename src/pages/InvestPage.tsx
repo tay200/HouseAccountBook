@@ -1,9 +1,9 @@
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { investAccountsApi, tradesApi, useRefreshStockPrices, useSaveStockPrice, useStockPrices } from '../api/tables'
 import AmountInput from '../components/AmountInput'
 import CrudTable, { type Column } from '../components/CrudTable'
 import { useLookups } from '../hooks/useLookups'
-import { formatNumber, formatUsd, formatWon } from '../lib/format'
+import { formatNumber, formatUsd, formatWon, todayString } from '../lib/format'
 import { calcTrade, holdings, investSummary } from '../lib/invest'
 import { FX_CODE, type InvestAccount, type Market, type StockPrice, type Trade } from '../lib/types'
 
@@ -32,6 +32,14 @@ export default function InvestPage() {
   const deleteAccount = investAccountsApi.useDelete()
   const refresh = useRefreshStockPrices()
   const { members, memberName } = useLookups()
+  // 매매 내역의 새 입력 줄 열림 여부 (보유 종목 쪽 버튼에서도 열 수 있도록 여기서 관리)
+  const [addingTrade, setAddingTrade] = useState(false)
+  const tradesCardRef = useRef<HTMLDivElement>(null)
+
+  function startAddTrade() {
+    setAddingTrade(true)
+    tradesCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const priceByCode = new Map(prices.map((p) => [p.stock_code, p]))
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
@@ -208,8 +216,14 @@ export default function InvestPage() {
       </div>
 
       <div className="card">
-        <h3 className="mb-1 font-semibold">보유 종목</h3>
-        <p className="mb-4 text-xs text-slate-500">현재가를 클릭하고 금액을 입력한 뒤 Enter 를 누르면 직접 고칠 수 있어요. 자동 조회가 안 되는 종목에 쓰세요.</p>
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="font-semibold">보유 종목</h3>
+          <button className="btn btn-primary" onClick={startAddTrade} disabled={accounts.length === 0}>
+            + 매수 추가
+          </button>
+        </div>
+        <p className="mb-4 text-xs text-slate-500">
+          보유 종목은 매매 내역에서 아직 팔지 않은 것을 모아서 보여줘요. 새로 산 종목은 '+ 매수 추가'로 매매 내역에 넣으세요.{' '}현재가를 클릭하고 금액을 입력한 뒤 Enter 를 누르면 직접 고칠 수 있어요. 자동 조회가 안 되는 종목에 쓰세요.</p>
         <table className="w-full text-sm tabular-nums">
           <thead className="border-b border-slate-200 text-xs text-slate-500">
             <tr>
@@ -246,8 +260,16 @@ export default function InvestPage() {
         {holdingList.length === 0 && <p className="py-6 text-center text-sm text-slate-400">보유 종목이 없어요.</p>}
       </div>
 
-      <div className="card">
-        <h3 className="mb-1 font-semibold">매매 내역</h3>
+      <div className="card scroll-mt-4" ref={tradesCardRef}>
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="font-semibold">매매 내역</h3>
+          {!addingTrade && (
+            <button className="btn btn-primary" onClick={startAddTrade} disabled={accounts.length === 0}>
+              + 매매 추가
+            </button>
+          )}
+        </div>
+        {accounts.length === 0 && <p className="mb-2 text-xs text-amber-700">먼저 아래 '투자 계좌'에서 계좌를 추가해 주세요.</p>}
         <p className="mb-4 text-xs text-slate-500">
           매수 1번 = 1줄. 팔았으면 그 줄에 매도일과 매도단가를 채우세요. 미국 주식은 단가를 달러로 넣고, 매수환율을 넣으면 환차손익까지 계산해요
           (비우면 현재 환율 기준).
@@ -255,13 +277,14 @@ export default function InvestPage() {
         <CrudTable
           rows={trades}
           columns={tradeColumns}
-          defaults={{ account_id: accounts[0]?.id ?? '', market: 'KR', fee: 0 }}
+          defaults={{ account_id: accounts[0]?.id ?? '', market: 'KR', fee: 0, buy_date: todayString() }}
           onSave={(values) =>
             // 미국 티커는 대문자로 통일 (aapl → AAPL)
             saveTrade.mutateAsync({ ...values, stock_code: String(values.stock_code).trim().toUpperCase() })
           }
           onDelete={(id) => deleteTrade.mutate(id)}
-          addLabel="+ 매매 추가"
+          adding={addingTrade}
+          onAddingChange={setAddingTrade}
         />
       </div>
 
