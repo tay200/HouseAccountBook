@@ -21,7 +21,7 @@ export default function DashboardPage() {
   const firstMonth = shiftMonth(month, -(TREND_MONTHS - 1))
   const prevMonth = shiftMonth(month, -1)
   // 최근 6개월치를 한 번에 받아서 이번 달 요약, 전월 대비, 추이 차트 모두에 쓴다
-  const { data: recent = [] } = useTransactions(firstMonth, month)
+  const { data: recent = [], isPending } = useTransactions(firstMonth, month)
   const { data: budgets = [] } = useBudgets(month)
   const { data: goals = [] } = goalsApi.useList()
   const { majorOf, memberName, paymentName } = useLookups()
@@ -70,6 +70,11 @@ export default function DashboardPage() {
         <MonthPicker month={month} onChange={setMonth} />
       </header>
 
+      {/* 불러오기 전에 0원·무지출이 잠깐 보였다 바뀌지 않도록 */}
+      {isPending ? (
+        <p className="card py-16 text-center text-sm text-slate-400">불러오는 중…</p>
+      ) : (
+      <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label="총 수입" value={formatWon(summary.income)} valueClass="text-blue-600" />
         <StatCard label="총 지출" value={formatWon(summary.expense)} />
@@ -141,7 +146,7 @@ export default function DashboardPage() {
 
         <div className="card">
           <h3 className="mb-2 font-semibold">변동지출 달력</h3>
-          <NoSpendCalendar month={month} spentByDate={variableByDate} />
+          <NoSpendCalendar month={month} spentByDate={variableByDate} hasRecords={thisMonth.length > 0} />
         </div>
 
         <div className="card">
@@ -154,6 +159,8 @@ export default function DashboardPage() {
           <BreakdownCard title="사람별 지출" rows={byMember.map(([id, amount]) => ({ id, name: memberName(id || null), amount }))} total={summary.expense} />
         </div>
       </div>
+      </>
+      )}
     </section>
   )
 }

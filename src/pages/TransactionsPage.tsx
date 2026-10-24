@@ -75,7 +75,8 @@ export default function TransactionsPage() {
       )}
 
       <TransactionForm
-        key={editing?.id ?? `new-${month}`}
+        // 새 거래 폼은 달을 바꿔도 다시 만들지 않는다 (입력 중인 내용 유지, 날짜만 그 달로)
+        key={editing?.id ?? 'new'}
         month={month}
         editing={editing}
         onDone={() => setEditing(null)}

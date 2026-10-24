@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useSaveTransaction } from '../api/transactions'
 import { useLookups } from '../hooks/useLookups'
 import { formatWon, todayString } from '../lib/format'
@@ -22,7 +22,7 @@ function defaultDate(month: string) {
 }
 
 // 부모가 key 를 바꿔주면 이 컴포넌트가 새로 만들어지면서 useState 초기값이 다시 적용된다.
-// (수정할 거래나 보고 있는 달이 바뀔 때 폼 내용을 갈아끼우는 가장 간단한 방법)
+// (수정할 거래가 바뀔 때 폼 내용을 갈아끼우는 가장 간단한 방법)
 export default function TransactionForm({ month, editing, onDone, onSaved }: Props) {
   const { categories, majorCategories, paymentMethods, members, categoryById } = useLookups()
 
@@ -43,6 +43,30 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
   const [discount, setDiscount] = useState<number | null>(editing?.discount || null)
   const [memo, setMemo] = useState(editing?.memo ?? '')
   const save = useSaveTransaction()
+  const formRef = useRef<HTMLFormElement>(null)
+  const amountRef = useRef<HTMLInputElement>(null)
+  // 저장 직후 잠깐 보여줄 '저장됨' 표시
+  const [justSaved, setJustSaved] = useState(false)
+
+  // 보고 있는 달을 바꾸면 (입력 중인 내용은 두고) 새 거래의 날짜만 그 달로 맞춘다
+  const [shownMonth, setShownMonth] = useState(month)
+  if (shownMonth !== month) {
+    setShownMonth(month)
+    if (!editing && !date.startsWith(month)) setDate(defaultDate(month))
+  }
+
+  // 표 아래쪽 거래의 [수정]을 눌러도 폼이 보이도록 화면을 옮기고 금액 칸에 포커스
+  useEffect(() => {
+    if (!editing) return
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    amountRef.current?.focus({ preventScroll: true })
+  }, [editing])
+
+  useEffect(() => {
+    if (!justSaved) return
+    const timer = setTimeout(() => setJustSaved(false), 2000)
+    return () => clearTimeout(timer)
+  }, [justSaved])
 
   const majorOptions = majorCategories.filter((c) => c.type === type)
   const subOptions = categories.filter((c) => c.parent_id && c.parent_id === majorId)
@@ -78,10 +102,12 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
           if (editing) {
             onDone()
           } else {
-            // 연달아 입력하기 편하도록 날짜·구분·사람·결제수단은 남기고 나머지만 비운다
+            // 연달아 입력하기 편하도록 날짜·구분·사람·카테고리·결제수단은 남기고 금액·내용만 비운 뒤 금액 칸으로
             setPayAmount(null)
             setDiscount(null)
             setMemo('')
+            setJustSaved(true)
+            amountRef.current?.focus()
           }
         },
       },
@@ -89,7 +115,7 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="card scroll-mt-4 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-semibold">{editing ? '거래 수정' : '새 거래'}</h3>
         <div className="flex gap-3">
@@ -151,7 +177,7 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
           </select>
         </Field>
         <Field label={type === 'expense' ? '결제금액' : '금액'}>
-          <AmountInput className="w-full" value={payAmount} onChange={setPayAmount} />
+          <AmountInput ref={amountRef} className="w-full" value={payAmount} onChange={setPayAmount} />
         </Field>
         {type === 'expense' && (
           <Field label="할인">
@@ -164,8 +190,12 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
       </div>
 
       <div className="flex items-center justify-end gap-3">
+        {justSaved && <span className="text-sm font-medium text-emerald-600">✓ 저장됨</span>}
         {type === 'expense' && (discount ?? 0) > 0 && (
           <span className="text-sm text-slate-500">실지출 {formatWon(Math.max(netAmount, 0))}</span>
+        )}
+        {payAmount !== null && netAmount <= 0 && (
+          <span className="text-xs text-red-600">{(discount ?? 0) > 0 ? '할인이 결제금액보다 크거나 같아요' : '금액을 넣어 주세요'}</span>
         )}
         {editing && (
           <button type="button" className="btn btn-secondary" onClick={onDone}>

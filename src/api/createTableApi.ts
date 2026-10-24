@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from './fetchAll'
 
 type Options = {
   /** 가져올 열 (기본: 전체) */
@@ -24,13 +25,14 @@ export function createTableApi<Row extends { id: string }>(table: string, option
   function useList() {
     return useQuery({
       queryKey: key,
-      queryFn: async () => {
-        let query = supabase.from(table).select(select)
-        for (const o of order) query = query.order(o.column, { ascending: o.ascending ?? true, nullsFirst: o.nullsFirst })
-        const { data, error } = await query
-        if (error) throw error
-        return data as unknown as Row[]
-      },
+      // 통장 기록처럼 계속 쌓이는 테이블은 1000행을 넘을 수 있어서 나눠 받는다
+      queryFn: () =>
+        fetchAll<Row>((from, to) => {
+          let query = supabase.from(table).select(select)
+          for (const o of order) query = query.order(o.column, { ascending: o.ascending ?? true, nullsFirst: o.nullsFirst })
+          // 마지막에 id 로 정렬해서 페이지 사이 순서가 흔들리지 않게 한다
+          return query.order('id').range(from, to) as unknown as PromiseLike<{ data: Row[] | null; error: unknown }>
+        }),
     })
   }
 

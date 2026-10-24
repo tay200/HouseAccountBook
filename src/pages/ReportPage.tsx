@@ -5,7 +5,7 @@ import AmountInput from '../components/AmountInput'
 import MonthlyTrendChart from '../components/MonthlyTrendChart'
 import PivotTable from '../components/PivotTable'
 import { useLookups } from '../hooks/useLookups'
-import { formatNumber, todayString } from '../lib/format'
+import { currentMonth, formatNumber, todayString } from '../lib/format'
 import { monthSummary } from '../lib/stats'
 import type { Goal, Transaction } from '../lib/types'
 
@@ -31,6 +31,9 @@ export default function ReportPage() {
   const { data: goals = [] } = goalsApi.useList()
   const { majorOf, categoryLabel, memberName, paymentName } = useLookups()
   const goal = goals.find((g) => g.year === year)
+  /** 저축률을 목표와 비교해 색으로 (목표 이상 초록, 미만 주황) */
+  const rateClass = (rate: number | null) =>
+    !goal?.saving_rate_target || rate === null ? '' : rate * 100 >= goal.saving_rate_target ? 'text-emerald-700' : 'text-amber-700'
 
   // 월별 요약 (엑셀 '메인 > 월별 리포트')
   const monthly = MONTHS.map((m) => monthSummary(transactions.filter((t) => Number(t.date.slice(5, 7)) === m)))
@@ -89,25 +92,31 @@ export default function ReportPage() {
                   {monthly.map((s, i) => {
                     const v = r.get(s)
                     return (
-                      <td key={i} className={`px-2 py-2 text-right ${!v ? 'text-slate-300' : v < 0 ? 'text-red-600' : ''}`}>
+                      <td key={i} className={`px-2 py-2 text-right ${!v ? 'text-slate-300' : v < 0 ? 'text-red-600' : r.isRate ? rateClass(v) : ''}`}>
                         {r.isRate ? percent(v) : v ? formatNumber(v) : '-'}
                       </td>
                     )
                   })}
-                  <td className="px-2 py-2 text-right font-semibold">{r.isRate ? percent(r.get(total)) : formatNumber(r.get(total) ?? 0)}</td>
+                  <td className={`px-2 py-2 text-right font-semibold ${r.isRate ? rateClass(r.get(total)) : ''}`}>
+                    {r.isRate ? percent(r.get(total)) : formatNumber(r.get(total) ?? 0)}
+                  </td>
                   <td className="py-2 pl-2 text-right text-slate-500">
-                    {r.isRate ? '' : formatNumber(Math.round((r.get(total) ?? 0) / activeMonths))}
+                    {r.isRate ? (goal?.saving_rate_target ? `목표 ${goal.saving_rate_target}%` : '') : formatNumber(Math.round((r.get(total) ?? 0) / activeMonths))}
                   </td>
                 </tr>
               ))}
               {goal?.monthly_saving_target ? (
                 <tr>
                   <td className="py-2 pr-3 whitespace-nowrap">저축 목표 달성</td>
-                  {monthly.map((s, i) => (
-                    <td key={i} className={`px-2 py-2 text-right ${s.saving === 0 ? 'text-slate-300' : s.saving >= goal.monthly_saving_target ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {s.saving === 0 ? '-' : percent(s.saving / goal.monthly_saving_target)}
-                    </td>
-                  ))}
+                  {monthly.map((s, i) => {
+                    // 아직 오지 않은 달만 '-'. 지난 달에 저축이 없으면 0% (미달)
+                    const future = `${year}-${String(i + 1).padStart(2, '0')}` > currentMonth()
+                    return (
+                      <td key={i} className={`px-2 py-2 text-right ${future ? 'text-slate-300' : s.saving >= goal.monthly_saving_target ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {future ? '-' : percent(s.saving / goal.monthly_saving_target)}
+                      </td>
+                    )
+                  })}
                   <td colSpan={2} />
                 </tr>
               ) : null}

@@ -1,5 +1,5 @@
 // 예금·적금·대출 계산. 금리(rate)와 세율(tax_rate)은 퍼센트 단위(3.5 = 3.5%).
-import { todayString } from './format'
+import { toDateString, todayString } from './format'
 import type { Deposit, InstallmentSaving, Loan, Term } from './types'
 
 /**
@@ -13,6 +13,19 @@ export function monthsBetween(from: string, to: string) {
   const lastDayOfToMonth = new Date(y2, m2, 0).getDate() // 다음 달 0일 = 이번 달 말일
   if (d2 < d1 && d2 !== lastDayOfToMonth) months -= 1
   return months
+}
+
+/** date 에서 n개월 뒤 날짜 (그 달에 같은 날짜가 없으면 말일. 예: 1/31 + 1개월 = 2/28) */
+export function addMonths(date: string, n: number) {
+  const [y, m, d] = date.split('-').map(Number)
+  const lastDay = new Date(y, m - 1 + n + 1, 0).getDate()
+  return toDateString(new Date(y, m - 1 + n, Math.min(d, lastDay)))
+}
+
+/** 오늘부터 date 까지 남은 일수 */
+export function daysUntil(date: string) {
+  const ms = new Date(`${date}T00:00:00`).getTime() - new Date(`${todayString()}T00:00:00`).getTime()
+  return Math.round(ms / 86_400_000)
 }
 
 /** 가입 기간과 오늘까지 지난 기간 */
@@ -107,6 +120,8 @@ export function calcLoan(loan: Loan) {
     totalPayment: loan.principal + totalInterest,
     paid,
     balance,
+    // 다음 회차 상환액과 상환일 (다 갚았으면 0, null)
     nextPayment: rows[p.elapsed]?.payment ?? 0,
+    nextDate: p.elapsed < rows.length ? addMonths(loan.start_date, p.elapsed + 1) : null,
   }
 }

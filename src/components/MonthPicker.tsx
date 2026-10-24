@@ -16,11 +16,14 @@ export default function MonthPicker({ month, onChange }: Props) {
       <button className="btn btn-text" onClick={() => onChange(shiftMonth(month, 1))} aria-label="다음 달">
         ▶
       </button>
-      {!isCurrent && (
-        <button className="btn btn-text text-xs" onClick={() => onChange(currentMonth())}>
-          이번 달
-        </button>
-      )}
+      {/* 이번 달이면 숨기기만 하고 자리는 남겨서, ◀ ▶ 위치가 바뀌지 않게 한다 (연속 클릭이 엇나가지 않도록) */}
+      <button
+        className={`btn btn-text text-xs ${isCurrent ? 'invisible' : ''}`}
+        onClick={() => onChange(currentMonth())}
+        tabIndex={isCurrent ? -1 : undefined}
+      >
+        이번 달
+      </button>
     </div>
   )
 }

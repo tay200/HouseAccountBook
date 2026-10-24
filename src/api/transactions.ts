@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { monthStart, shiftMonth } from '../lib/format'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from './fetchAll'
 import type { Transaction, TransactionInput } from '../lib/types'
 
 /**
@@ -10,17 +11,19 @@ import type { Transaction, TransactionInput } from '../lib/types'
 export function useTransactions(fromMonth: string, toMonth: string) {
   return useQuery({
     queryKey: ['transactions', fromMonth, toMonth],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('id, date, type, kind, amount, discount, category_id, payment_method_id, member_id, memo')
-        .gte('date', monthStart(fromMonth))
-        .lt('date', monthStart(shiftMonth(toMonth, 1)))
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false })
-      if (error) throw error
-      return data as Transaction[]
-    },
+    // 1년치(연간 리포트)는 1000건을 넘을 수 있어서 나눠 받는다
+    queryFn: () =>
+      fetchAll<Transaction>((from, to) =>
+        supabase
+          .from('transactions')
+          .select('id, date, type, kind, amount, discount, category_id, payment_method_id, member_id, memo')
+          .gte('date', monthStart(fromMonth))
+          .lt('date', monthStart(shiftMonth(toMonth, 1)))
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      ),
   })
 }
 

@@ -6,33 +6,42 @@ type Props = {
   month: string
   /** 'YYYY-MM-DD' → 그날 변동지출 합계 */
   spentByDate: Map<string, number>
+  /** 그 달에 기록이 하나라도 있는지. 없으면 가계부를 안 쓴 달이므로 무지출로 세지 않는다 */
+  hasRecords: boolean
 }
 
 /**
  * 변동지출 달력. 오늘 이전인데 변동지출이 없는 날은 '무지출'로 표시한다. (엑셀 '변동지출 달력')
  */
-export default function NoSpendCalendar({ month, spentByDate }: Props) {
+export default function NoSpendCalendar({ month, spentByDate, hasRecords }: Props) {
   const first = new Date(`${monthStart(month)}T00:00:00`)
   const today = todayString()
   // 달력 첫 칸 = 1일이 속한 주의 일요일
   const start = new Date(first)
   start.setDate(1 - first.getDay())
 
-  const days: { date: string; inMonth: boolean }[] = []
-  for (let i = 0; i < 42; i++) {
+  // 필요한 주 수 = (1일 앞의 빈칸 + 그 달 일수) 를 7로 나눠 올림 (4~6주)
+  const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()
+  const weeks = Math.ceil((first.getDay() + daysInMonth) / 7)
+  const visible: { date: string; inMonth: boolean }[] = []
+  for (let i = 0; i < weeks * 7; i++) {
     const d = new Date(start)
     d.setDate(start.getDate() + i)
-    days.push({ date: toDateString(d), inMonth: d.getMonth() === first.getMonth() })
+    visible.push({ date: toDateString(d), inMonth: d.getMonth() === first.getMonth() })
   }
-  // 마지막 주가 통째로 다음 달이면 잘라낸다
-  const weeks = days[35].inMonth ? 6 : 5
-  const visible = days.slice(0, weeks * 7)
-  const noSpendDays = visible.filter((d) => d.inMonth && d.date < today && !spentByDate.get(d.date)).length
+  const isNoSpend = (date: string) => hasRecords && date < today && !spentByDate.get(date)
+  const noSpendDays = visible.filter((d) => d.inMonth && isNoSpend(d.date)).length
 
   return (
     <div>
       <p className="mb-3 text-sm text-slate-500">
-        무지출 성공 <strong className="text-emerald-600">{noSpendDays}일</strong>
+        {hasRecords ? (
+          <>
+            무지출 성공 <strong className="text-emerald-600">{noSpendDays}일</strong>
+          </>
+        ) : (
+          '이 달은 아직 기록이 없어요.'
+        )}
       </p>
       <div className="grid grid-cols-7 gap-1 text-center text-xs">
         {WEEKDAYS.map((w, i) => (
@@ -42,7 +51,7 @@ export default function NoSpendCalendar({ month, spentByDate }: Props) {
         ))}
         {visible.map(({ date, inMonth }) => {
           const spent = spentByDate.get(date) ?? 0
-          const noSpend = inMonth && date < today && spent === 0
+          const noSpend = inMonth && isNoSpend(date)
           return (
             <div
               key={date}

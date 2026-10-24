@@ -72,6 +72,7 @@ export default function InvestPage() {
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
   const { positions, open, realizedByTrade, oversold } = analyzeInvest(stockHoldings, trades, priceByCode)
   const fxMissing = open.some((p) => p.fxMissing)
+  const closed = positions.filter((p) => p.quantity === 0)
 
   /** 매수 기록·보유분을 지웠을 때 뒤의 매도가 가진 수량을 넘게 되면 막는다 */
   function confirmRemove(next: { holdings?: StockHolding[]; trades?: StockTrade[] }, question: string) {
@@ -85,6 +86,22 @@ export default function InvestPage() {
     }
     return confirm(question)
   }
+
+  /** 직접 넣은 보유분의 [수정] [삭제] 버튼 (보유 중·청산 종목 공용) */
+  const holdingButtons = (h: StockHolding) => (
+    <>
+      <button className="btn btn-text" onClick={() => setHoldingForm(h)} title="직접 넣은 보유분 수정">수정</button>
+      <button
+        className="btn btn-danger-text"
+        onClick={() =>
+          confirmRemove({ holdings: stockHoldings.filter((x) => x.id !== h.id) }, '직접 넣은 보유분을 삭제할까요? (매매 내역은 그대로)') &&
+          deleteHolding.mutate(h.id)
+        }
+      >
+        삭제
+      </button>
+    </>
+  )
 
   /** 투자 계좌를 지우면 그 계좌의 매매 기록·보유분도 함께 지워진다 (DB: on delete cascade) */
   function confirmDeleteAccount(a: InvestAccount) {
@@ -193,7 +210,7 @@ export default function InvestPage() {
     { key: 'fee', label: '수수료·세금', align: 'right', render: (t) => formatLocal(t.fee, t.market) },
     {
       key: 'amount',
-      label: '금액(원)',
+      label: '거래금액(원)',
       align: 'right',
       render: (t) => formatWon(Math.round(tradeAmount(t, priceByCode))),
       sortValue: (t) => tradeAmount(t, priceByCode),
@@ -382,22 +399,7 @@ export default function InvestPage() {
                   <td className="py-2 text-right whitespace-nowrap">
                     <button className="btn btn-text text-blue-600" onClick={() => startTrade('sell', p.key)}>매도</button>
                     {/* 직접 넣은 보유분이 있는 종목만 수정·삭제 (매매 기록은 매매 내역에서) */}
-                    {p.holding && (
-                      <>
-                        <button className="btn btn-text" onClick={() => setHoldingForm(p.holding)} title="직접 넣은 보유분 수정">수정</button>
-                        <button
-                          className="btn btn-danger-text"
-                          onClick={() =>
-                            confirmRemove(
-                              { holdings: stockHoldings.filter((h) => h.id !== p.holding!.id) },
-                              '직접 넣은 보유분을 삭제할까요? (매매 내역은 그대로)',
-                            ) && deleteHolding.mutate(p.holding!.id)
-                          }
-                        >
-                          삭제
-                        </button>
-                      </>
-                    )}
+                    {p.holding && holdingButtons(p.holding)}
                   </td>
                 </tr>
               )
@@ -405,6 +407,27 @@ export default function InvestPage() {
           </tbody>
         </table>
         {open.length === 0 && <p className="py-6 text-center text-sm text-slate-400">보유 종목이 없어요.</p>}
+        {closed.length > 0 && (
+          // 다 판 종목: 실현손익을 보고, 직접 넣었던 보유분이 있으면 여기서 고치거나 지울 수 있다
+          <details className="mt-4 rounded-lg border border-slate-200 px-4 py-2">
+            <summary className="cursor-pointer text-sm text-slate-600">청산 종목 {closed.length}개 (다 판 종목)</summary>
+            <table className="mt-2 w-full text-sm tabular-nums">
+              <tbody className="divide-y divide-slate-100">
+                {closed.map((p) => (
+                  <tr key={p.key}>
+                    <td className="py-2">{accountName(p.accountId)}</td>
+                    <td className="py-2">
+                      {p.market === 'US' && <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-500">US</span>}
+                      {p.name} <span className="text-xs text-slate-400">{p.code}</span>
+                    </td>
+                    <td className="py-2 text-right">실현손익 {signed(Math.round(p.realized))}</td>
+                    <td className="w-44 py-2 text-right whitespace-nowrap">{p.holding && holdingButtons(p.holding)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        )}
       </div>
 
       <div className="card scroll-mt-4" ref={tradesCardRef}>
@@ -489,17 +512,24 @@ function PriceCell({ code, price, market, format }: PriceCellProps) {
   const save = useSaveStockPrice()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState<number | null>(price?.price ?? null)
+  // Esc 로 닫을 때는 저장하지 않는다
+  const cancelled = useRef(false)
 
   if (!editing) {
     return (
-      <button className="rounded px-1 hover:bg-slate-100" onClick={() => { setValue(price?.price ?? null); setEditing(true) }}>
+      <button className="rounded px-1 hover:bg-slate-100" onClick={() => { setValue(price?.price ?? null); cancelled.current = false; setEditing(true) }}>
         {price ? format(price.price) : <span className="text-amber-600">입력 필요</span>}
       </button>
     )
   }
+  // Enter 를 누르거나 다른 곳을 클릭하면 저장 (값이 바뀌었을 때만)
+  function commit() {
+    if (!cancelled.current && value && value > 0 && value !== price?.price) save.mutate({ stock_code: code, price: value })
+    setEditing(false)
+  }
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && value) save.mutate({ stock_code: code, price: value }, { onSuccess: () => setEditing(false) })
-    if (e.key === 'Escape') setEditing(false)
+    if (e.key === 'Escape') cancelled.current = true
+    if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
   }
   if (market === 'US') {
     return (
@@ -511,9 +541,9 @@ function PriceCell({ code, price, market, format }: PriceCellProps) {
         value={value ?? ''}
         onChange={(e) => setValue(e.target.value === '' ? null : Number(e.target.value))}
         onKeyDown={handleKeyDown}
-        onBlur={() => setEditing(false)}
+        onBlur={commit}
       />
     )
   }
-  return <AmountInput className="w-28 py-1" value={value} onChange={setValue} onKeyDown={handleKeyDown} onBlur={() => setEditing(false)} />
+  return <AmountInput autoFocus className="w-28 py-1" value={value} onChange={setValue} onKeyDown={handleKeyDown} onBlur={commit} />
 }

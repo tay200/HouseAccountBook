@@ -7,7 +7,9 @@ import { currentMonth } from '../lib/format'
  */
 export function useMonth() {
   const [params, setParams] = useSearchParams()
-  const month = params.get('month') ?? currentMonth()
+  // 주소에 잘못된 값(?month=abc)이 들어 있으면 이번 달로 본다
+  const param = params.get('month')
+  const month = param && /^\d{4}-(0[1-9]|1[0-2])$/.test(param) ? param : currentMonth()
 
   function setMonth(next: string) {
     setParams((prev) => {

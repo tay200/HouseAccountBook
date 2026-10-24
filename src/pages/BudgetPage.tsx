@@ -7,7 +7,7 @@ import ColorDot from '../components/ColorDot'
 import MonthPicker from '../components/MonthPicker'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
-import { formatWon, shiftMonth } from '../lib/format'
+import { formatMonthShort, formatWon, shiftMonth } from '../lib/format'
 import { isConsumption, sumGrouped } from '../lib/stats'
 import type { Budget, Category } from '../lib/types'
 
@@ -17,6 +17,8 @@ export default function BudgetPage() {
   const { data: budgets = [], isSuccess: budgetsLoaded } = useBudgets(month)
   const { data: transactions = [] } = useTransactions(month, month)
   const copyBudgets = useCopyBudgets()
+  const prevMonth = shiftMonth(month, -1)
+  const { data: prevBudgets = [] } = useBudgets(prevMonth)
 
   // 예산은 지출 대분류 단위로 잡고, 소분류 거래는 대분류로 합산한다
   // 사용액은 대시보드 '예산 대비'와 같이 소비성 지출만 센다 (저축성 지출은 쓴 돈이 아니라 모은 돈)
@@ -38,16 +40,17 @@ export default function BudgetPage() {
       <div className="card space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm text-slate-500">이번 달 총 예산</p>
+            <p className="text-sm text-slate-500">{formatMonthShort(month)} 총 예산</p>
             <p className="text-2xl font-bold tabular-nums">{formatWon(totalBudget)}</p>
           </div>
-          {budgetsLoaded && budgets.length === 0 && (
+          {/* 이 달 예산이 비어 있고 지난달 예산이 있을 때만 복사 버튼 */}
+          {budgetsLoaded && budgets.length === 0 && prevBudgets.length > 0 && (
             <button
               className="btn btn-secondary"
               disabled={copyBudgets.isPending}
-              onClick={() => copyBudgets.mutate({ fromMonth: shiftMonth(month, -1), toMonth: month })}
+              onClick={() => copyBudgets.mutate({ fromMonth: prevMonth, toMonth: month })}
             >
-              지난달 예산 복사
+              {formatMonthShort(prevMonth)} 예산 {prevBudgets.length}개 복사
             </button>
           )}
         </div>

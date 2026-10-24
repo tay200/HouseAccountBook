@@ -12,12 +12,17 @@ const COLORS = { income: '#2a78d6', expense: '#eb6834' }
 const INK_MUTED = '#898781'
 const GRID = '#e1e0d9'
 
-/** 1234567 → '123만' (축 눈금은 짧게) */
+/** 1234567 → '123만' (축 눈금은 짧게). 1만 원 미만은 원 단위로 */
 function formatManwon(value: number) {
-  return value === 0 ? '0' : `${formatNumber(Math.round(value / 10000))}만`
+  if (value === 0) return '0'
+  if (Math.abs(value) < 10000) return formatNumber(value)
+  return `${formatNumber(Math.round(value / 10000))}만`
 }
 
 export default function MonthlyTrendChart({ data }: { data: MonthlyTotal[] }) {
+  if (data.every((d) => d.income === 0 && d.expense === 0)) {
+    return <p className="py-16 text-center text-sm text-slate-400">이 기간에는 기록이 없어요.</p>
+  }
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} barGap={2} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>

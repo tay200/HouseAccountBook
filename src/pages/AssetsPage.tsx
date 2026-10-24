@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import {
   bankAccountsApi,
   depositsApi,
+  investAccountsApi,
   ledgerApi,
   loansApi,
   realAssetsApi,
@@ -14,7 +15,7 @@ import {
 import CrudTable, { type Column } from '../components/CrudTable'
 import { useLookups } from '../hooks/useLookups'
 import { formatWon, todayString } from '../lib/format'
-import { calcDeposit, calcLoan, calcSaving, termByMonths } from '../lib/finance'
+import { calcDeposit, calcLoan, calcSaving, daysUntil, monthsBetween, termByMonths } from '../lib/finance'
 import { analyzeInvest, investSummary } from '../lib/invest'
 import {
   LOAN_METHOD_LABEL,
@@ -79,19 +80,21 @@ function useAssetItems() {
   const { data: loans = [] } = loansApi.useList()
   const { data: realAssets = [] } = realAssetsApi.useList()
   const { data: ledger = [] } = ledgerApi.useList()
+  const { data: investAccounts = [] } = investAccountsApi.useList()
   const { data: stockHoldings = [] } = stockHoldingsApi.useList()
   const { data: trades = [] } = stockTradesApi.useList()
   const { data: prices = [] } = useStockPrices()
 
   const items: AssetItem[] = [
     ...accounts.map((a) => ({ label: a.name, group: '계좌', amount: a.balance, term: a.term, risky: false })),
+    // 만기가 지난 예적금은 세후 수령액으로 넣는다 (다른 계좌로 옮겼으면 정리해 주세요)
     ...deposits.map((d) => {
       const c = calcDeposit(d)
-      return { label: d.name, group: '예금', amount: c.current, term: termByMonths(c.total), risky: false }
+      return { label: maturedLabel(d.name, c.matured), group: '예금', amount: c.matured ? c.maturityAmount : c.current, term: termByMonths(c.total), risky: false }
     }),
     ...savings.map((s) => {
       const c = calcSaving(s)
-      return { label: s.name, group: '적금', amount: c.current, term: termByMonths(c.total), risky: false }
+      return { label: maturedLabel(s.name, c.matured), group: '적금', amount: c.matured ? c.maturityAmount : c.current, term: termByMonths(c.total), risky: false }
     }),
   ]
 
@@ -100,8 +103,11 @@ function useAssetItems() {
   for (const e of ledger) books.set(e.book, (books.get(e.book) ?? 0) + (e.direction === 'in' ? e.amount : -e.amount))
   for (const [book, balance] of books) items.push({ label: book, group: '통장 기록', amount: balance, term: 'short', risky: false })
 
+  // 순자산에는 투자 탭에서 '합계 포함'을 끈 계좌(연금 등)도 넣는다 (내 자산이므로)
   const invest = investSummary(analyzeInvest(stockHoldings, trades, new Map(prices.map((p) => [p.stock_code, p]))).positions)
-  if (invest.value > 0) items.push({ label: '투자 평가금액', group: '투자', amount: invest.value, term: 'mid', risky: true })
+  const excludedCount = investAccounts.filter((a) => a.included === false).length
+  const investLabel = excludedCount > 0 ? `투자 평가금액 (투자 탭 합계 제외 계좌 ${excludedCount}개 포함)` : '투자 평가금액'
+  if (invest.value > 0) items.push({ label: investLabel, group: '투자', amount: invest.value, term: 'mid', risky: true })
 
   const financial = items.reduce((s, i) => s + i.amount, 0)
   const real = realAssets.reduce((s, r) => s + r.amount, 0)
@@ -204,8 +210,9 @@ function RatioCard({ title, rows, total }: { title: string; rows: { label: strin
         <p className="py-6 text-center text-sm text-slate-400">데이터가 없어요.</p>
       ) : (
         <ul className="space-y-3 text-sm">
-          {rows.map((r) => (
-            <li key={r.label} className="space-y-1">
+          {/* 이름이 같은 계좌가 있을 수 있어서 순서를 key 에 섞는다 */}
+          {rows.map((r, i) => (
+            <li key={`${i}-${r.label}`} className="space-y-1">
               <div className="flex justify-between gap-2">
                 <span className="truncate">{r.label}</span>
                 <span className="whitespace-nowrap tabular-nums">
@@ -278,7 +285,7 @@ function DepositsTab() {
     { key: 'principal', label: '원금', input: { type: 'money' }, required: true, align: 'right' },
     { key: 'rate', label: '금리(%)', input: { type: 'number' }, required: true, align: 'right', render: (d) => pct(d.rate) },
     { key: 'tax_rate', label: '세율(%)', input: { type: 'number' }, required: true, align: 'right', render: (d) => pct(d.tax_rate) },
-    { key: 'remain', label: '남은 기간', render: (d) => (calcDeposit(d).matured ? '만기' : `${calcDeposit(d).remaining}개월`), sortValue: (d) => (calcDeposit(d).matured ? 0 : calcDeposit(d).remaining) },
+    { key: 'remain', label: '남은 기간', render: (d) => <RemainCell maturity={d.maturity_date} />, sortValue: (d) => daysUntil(d.maturity_date) },
     { key: 'after', label: '세후이자', align: 'right', render: (d) => formatWon(calcDeposit(d).afterTax), sortValue: (d) => calcDeposit(d).afterTax },
     { key: 'receive', label: '예상수령액', align: 'right', render: (d) => formatWon(calcDeposit(d).maturityAmount), sortValue: (d) => calcDeposit(d).maturityAmount },
   ]
@@ -311,6 +318,7 @@ function SavingsTab() {
       input: { type: 'select', options: Object.entries(SAVING_METHOD_LABEL).map(([value, label]) => ({ value, label })) },
       required: true,
     },
+    { key: 'remain', label: '남은 기간', render: (s) => <RemainCell maturity={s.maturity_date} />, sortValue: (s) => daysUntil(s.maturity_date) },
     { key: 'current', label: '현재저축액', align: 'right', render: (s) => formatWon(calcSaving(s).current), sortValue: (s) => calcSaving(s).current },
     { key: 'after', label: '세후이자', align: 'right', render: (s) => formatWon(calcSaving(s).afterTax), sortValue: (s) => calcSaving(s).afterTax },
     { key: 'receive', label: '예상수령액', align: 'right', render: (s) => formatWon(calcSaving(s).maturityAmount), sortValue: (s) => calcSaving(s).maturityAmount },
@@ -340,7 +348,22 @@ function LoansTab() {
       input: { type: 'select', options: Object.entries(LOAN_METHOD_LABEL).map(([value, label]) => ({ value, label })) },
       required: true,
     },
-    { key: 'monthly', label: '이번 달 상환액', align: 'right', render: (l) => formatWon(calcLoan(l).nextPayment), sortValue: (l) => calcLoan(l).nextPayment },
+    {
+      key: 'monthly',
+      label: '다음 상환',
+      align: 'right',
+      render: (l) => {
+        const c = calcLoan(l)
+        if (!c.nextDate) return <span className="text-slate-400">상환 끝</span>
+        return (
+          <>
+            {formatWon(c.nextPayment)}
+            <div className="text-xs text-slate-400">{c.nextDate}</div>
+          </>
+        )
+      },
+      sortValue: (l) => calcLoan(l).nextPayment,
+    },
     { key: 'interest', label: '총 이자', align: 'right', render: (l) => formatWon(calcLoan(l).totalInterest), sortValue: (l) => calcLoan(l).totalInterest },
     { key: 'paid', label: '누적상환', align: 'right', render: (l) => formatWon(calcLoan(l).paid), sortValue: (l) => calcLoan(l).paid },
     { key: 'balance', label: '대출잔금', align: 'right', render: (l) => formatWon(calcLoan(l).balance), sortValue: (l) => calcLoan(l).balance },
@@ -405,6 +428,25 @@ function RealAssetsTab() {
       <TotalLine label="부동자산 합계" amount={data.reduce((s, r) => s + r.amount, 0)} />
     </TabCard>
   )
+}
+
+/** 만기 지난 예적금 이름 표시 */
+function maturedLabel(name: string, matured: boolean) {
+  return matured ? `${name} (만기 지남)` : name
+}
+
+/** 만기까지 남은 기간: 1개월 넘으면 개월, 안 되면 일. 지났으면 정리 안내 배지 */
+function RemainCell({ maturity }: { maturity: string }) {
+  const days = daysUntil(maturity)
+  if (days <= 0) {
+    return (
+      <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700" title="만기금을 다른 계좌로 옮겼다면 이 항목을 정리해 주세요. 자산현황에는 세후 수령액으로 들어가요.">
+        만기 지남
+      </span>
+    )
+  }
+  const months = monthsBetween(todayString(), maturity)
+  return <>{months >= 1 ? `${months}개월` : `${days}일`}</>
 }
 
 function TabCard({ note, children }: { note?: string; children: ReactNode }) {
