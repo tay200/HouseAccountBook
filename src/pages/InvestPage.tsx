@@ -10,10 +10,12 @@ import {
 import AmountInput from '../components/AmountInput'
 import CrudTable, { type Column } from '../components/CrudTable'
 import HoldingForm from '../components/HoldingForm'
+import SortHeader from '../components/SortHeader'
 import TradeForm from '../components/TradeForm'
 import { useLookups } from '../hooks/useLookups'
+import { useSort } from '../hooks/useSort'
 import { formatNumber, formatUsd, formatWon } from '../lib/format'
-import { analyzeInvest, investSummary, tradeAmount } from '../lib/invest'
+import { analyzeInvest, currentFx, investSummary, tradeAmount } from '../lib/invest'
 import { FX_CODE, SIDE_LABEL, type InvestAccount, type Market, type StockHolding, type StockPrice, type StockTrade, type TradeSide } from '../lib/types'
 
 /** 해당 통화로 금액 표시 (KR=원, US=달러) */
@@ -30,6 +32,8 @@ function rate(value: number, base: number) {
   const r = (value / base) * 100
   return <span className={r > 0 ? 'text-red-600' : r < 0 ? 'text-blue-600' : ''}>{r > 0 ? '+' : ''}{r.toFixed(2)}%</span>
 }
+
+const marketLabel = (market: Market) => (market === 'US' ? '미국' : '한국')
 
 /** 매수는 빨강, 매도는 파랑 */
 function SideBadge({ side }: { side: TradeSide }) {
@@ -67,6 +71,31 @@ export default function InvestPage() {
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
   const { positions, open, realizedByTrade } = analyzeInvest(stockHoldings, trades, priceByCode)
 
+  // 보유 종목 표 머리글 정렬. 단가는 한국·미국 종목을 같이 비교할 수 있게 원화로
+  const fxNow = currentFx(priceByCode) ?? 0
+  const holdingSort = useSort(open, (p, key) => {
+    switch (key) {
+      case 'account': return accountName(p.accountId)
+      case 'name': return p.name
+      case 'quantity': return p.quantity
+      case 'avg': return p.cost / p.quantity
+      case 'price': return p.currentPrice === null ? null : p.currentPrice * (p.market === 'US' ? fxNow : 1)
+      case 'value': return p.value
+      case 'unrealized': return p.unrealized
+      case 'rate': return p.cost > 0 ? p.unrealized / p.cost : null
+    }
+  })
+  const holdingHeaders: { key: string; label: string; align?: 'right' }[] = [
+    { key: 'account', label: '계좌' },
+    { key: 'name', label: '종목' },
+    { key: 'quantity', label: '수량', align: 'right' },
+    { key: 'avg', label: '평균단가', align: 'right' },
+    { key: 'price', label: '현재가', align: 'right' },
+    { key: 'value', label: '평가금액', align: 'right' },
+    { key: 'unrealized', label: '평가손익', align: 'right' },
+    { key: 'rate', label: '수익률', align: 'right' },
+  ]
+
   // 계좌별 현황에서 체크한 계좌만 위쪽 합계에 넣는다 (예: 연금 계좌 제외)
   const isIncluded = (a: InvestAccount) => a.included !== false
   const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
@@ -96,10 +125,10 @@ export default function InvestPage() {
   const dash = <span className="text-slate-300">-</span>
   // 입력은 TradeForm 이 맡으므로 여기 열들은 표시용
   const tradeColumns: Column<StockTrade>[] = [
-    { key: 'side', label: '구분', render: (t) => <SideBadge side={t.side} /> },
+    { key: 'side', label: '구분', render: (t) => <SideBadge side={t.side} />, sortValue: (t) => SIDE_LABEL[t.side] },
     { key: 'trade_date', label: '날짜' },
-    { key: 'account_id', label: '계좌', render: (t) => accountName(t.account_id) },
-    { key: 'market', label: '시장', render: (t) => (t.market === 'US' ? '미국' : '한국') },
+    { key: 'account_id', label: '계좌', render: (t) => accountName(t.account_id), sortValue: (t) => accountName(t.account_id) },
+    { key: 'market', label: '시장', render: (t) => marketLabel(t.market), sortValue: (t) => marketLabel(t.market) },
     { key: 'stock_code', label: '종목코드' },
     { key: 'stock_name', label: '종목명' },
     { key: 'price', label: '단가', align: 'right', render: (t) => formatLocal(t.price, t.market) },
@@ -111,12 +140,19 @@ export default function InvestPage() {
       render: (t) => (t.market !== 'US' ? dash : t.fx_rate ? formatNumber(t.fx_rate) : <span className="text-slate-400">현재</span>),
     },
     { key: 'fee', label: '수수료·세금', align: 'right', render: (t) => formatLocal(t.fee, t.market) },
-    { key: 'amount', label: '금액(원)', align: 'right', render: (t) => formatWon(Math.round(tradeAmount(t, priceByCode))) },
+    {
+      key: 'amount',
+      label: '금액(원)',
+      align: 'right',
+      render: (t) => formatWon(Math.round(tradeAmount(t, priceByCode))),
+      sortValue: (t) => tradeAmount(t, priceByCode),
+    },
     {
       key: 'realized',
       label: '실현손익',
       align: 'right',
       render: (t) => (t.side === 'sell' ? signed(Math.round(realizedByTrade.get(t.id) ?? 0)) : dash),
+      sortValue: (t) => (t.side === 'sell' ? (realizedByTrade.get(t.id) ?? 0) : null),
     },
     { key: 'memo', label: '메모' },
   ]
@@ -247,19 +283,21 @@ export default function InvestPage() {
         <table className="w-full text-sm tabular-nums">
           <thead className="border-b border-slate-200 text-xs text-slate-500">
             <tr>
-              <th className="py-2 text-left font-medium">계좌</th>
-              <th className="py-2 text-left font-medium">종목</th>
-              <th className="py-2 text-right font-medium">수량</th>
-              <th className="py-2 text-right font-medium">평균단가</th>
-              <th className="py-2 text-right font-medium">현재가</th>
-              <th className="py-2 text-right font-medium">평가금액</th>
-              <th className="py-2 text-right font-medium">평가손익</th>
-              <th className="py-2 text-right font-medium">수익률</th>
+              {holdingHeaders.map((h) => (
+                <SortHeader
+                  key={h.key}
+                  label={h.label}
+                  sortKey={h.key}
+                  sort={holdingSort.sort}
+                  onToggle={holdingSort.toggle}
+                  align={h.align}
+                />
+              ))}
               <th className="w-44" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {open.map((p) => {
+            {holdingSort.sorted.map((p) => {
               const avg = p.costLocal / p.quantity
               return (
                 <tr key={p.key} className={holdingForm !== null && holdingForm !== 'new' && holdingForm.id === p.holding?.id ? 'bg-blue-50' : ''}>

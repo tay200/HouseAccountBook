@@ -55,7 +55,7 @@ export default function LedgerPage() {
     },
     { key: 'memo', label: '내역', input: { type: 'text' } },
     { key: 'amount', label: '금액', input: { type: 'money' }, required: true, align: 'right' },
-    { key: 'balance', label: '잔액', align: 'right', render: (e) => formatWon(balanceById.get(e.id) ?? 0) },
+    { key: 'balance', label: '잔액', align: 'right', render: (e) => formatWon(balanceById.get(e.id) ?? 0), sortValue: (e) => balanceById.get(e.id) ?? 0 },
   ]
 
   return (

@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatNumber, formatWon } from '../lib/format'
+import { useSort, type SortValue } from '../hooks/useSort'
 import AmountInput from './AmountInput'
+import SortHeader from './SortHeader'
 
 /** 입력칸 종류 */
 export type FieldInput =
@@ -23,6 +25,8 @@ export type Column<T> = {
   render?: (row: T) => ReactNode
   align?: 'left' | 'right'
   width?: string
+  /** 머리글 클릭 정렬에 쓸 값 (없으면 DB 값, 선택 칸은 화면 이름). 계산 열은 꼭 지정 */
+  sortValue?: (row: T) => SortValue
 }
 
 type Values = Record<string, unknown>
@@ -96,6 +100,16 @@ export default function CrudTable<T extends { id: string }>({
   // 새 항목 추가와 기존 항목 수정은 동시에 하나만 연다
   const editingRow = adding ? undefined : rows.find((r) => r.id === editingId)
 
+  // 머리글 클릭 정렬
+  const { sorted, sort, toggle } = useSort(rows, (row, key) => {
+    const c = columns.find((col) => col.key === key)
+    if (c?.sortValue) return c.sortValue(row)
+    const v = (row as unknown as Values)[key]
+    // 선택 칸은 저장된 값(id 등) 대신 화면에 보이는 이름으로
+    if (c?.input?.type === 'select') return c.input.options.find((o) => o.value === v)?.label ?? (v ? String(v) : c.input.emptyLabel)
+    return v as SortValue
+  })
+
   return (
     <div>
       {adding && renderForm && (
@@ -131,15 +145,13 @@ export default function CrudTable<T extends { id: string }>({
           <thead className="border-b border-slate-200 text-left text-xs text-slate-500">
             <tr>
               {columns.map((c) => (
-                <th key={c.key} className={`py-2 pr-3 font-medium whitespace-nowrap ${c.align === 'right' ? 'text-right' : ''}`} style={{ width: c.width }}>
-                  {c.label}
-                </th>
+                <SortHeader key={c.key} label={c.label} sortKey={c.key} sort={sort} onToggle={toggle} align={c.align} width={c.width} className="pr-3" />
               ))}
               <th className="w-28" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => (
+            {sorted.map((row) => (
               <DisplayRow
                 key={row.id}
                 row={row}

@@ -137,6 +137,10 @@ function SummaryTab() {
       key: 'change',
       label: '전년 대비',
       align: 'right',
+      sortValue: (s) => {
+        const prev = snapshots.find((p) => p.year === s.year - 1)
+        return prev ? s.amount - prev.amount : null
+      },
       render: (s) => {
         const prev = snapshots.find((p) => p.year === s.year - 1)
         if (!prev) return '-'
@@ -274,9 +278,9 @@ function DepositsTab() {
     { key: 'principal', label: '원금', input: { type: 'money' }, required: true, align: 'right' },
     { key: 'rate', label: '금리(%)', input: { type: 'number' }, required: true, align: 'right', render: (d) => pct(d.rate) },
     { key: 'tax_rate', label: '세율(%)', input: { type: 'number' }, required: true, align: 'right', render: (d) => pct(d.tax_rate) },
-    { key: 'remain', label: '남은 기간', render: (d) => (calcDeposit(d).matured ? '만기' : `${calcDeposit(d).remaining}개월`) },
-    { key: 'after', label: '세후이자', align: 'right', render: (d) => formatWon(calcDeposit(d).afterTax) },
-    { key: 'receive', label: '예상수령액', align: 'right', render: (d) => formatWon(calcDeposit(d).maturityAmount) },
+    { key: 'remain', label: '남은 기간', render: (d) => (calcDeposit(d).matured ? '만기' : `${calcDeposit(d).remaining}개월`), sortValue: (d) => (calcDeposit(d).matured ? 0 : calcDeposit(d).remaining) },
+    { key: 'after', label: '세후이자', align: 'right', render: (d) => formatWon(calcDeposit(d).afterTax), sortValue: (d) => calcDeposit(d).afterTax },
+    { key: 'receive', label: '예상수령액', align: 'right', render: (d) => formatWon(calcDeposit(d).maturityAmount), sortValue: (d) => calcDeposit(d).maturityAmount },
   ]
   return (
     <TabCard>
@@ -307,9 +311,9 @@ function SavingsTab() {
       input: { type: 'select', options: Object.entries(SAVING_METHOD_LABEL).map(([value, label]) => ({ value, label })) },
       required: true,
     },
-    { key: 'current', label: '현재저축액', align: 'right', render: (s) => formatWon(calcSaving(s).current) },
-    { key: 'after', label: '세후이자', align: 'right', render: (s) => formatWon(calcSaving(s).afterTax) },
-    { key: 'receive', label: '예상수령액', align: 'right', render: (s) => formatWon(calcSaving(s).maturityAmount) },
+    { key: 'current', label: '현재저축액', align: 'right', render: (s) => formatWon(calcSaving(s).current), sortValue: (s) => calcSaving(s).current },
+    { key: 'after', label: '세후이자', align: 'right', render: (s) => formatWon(calcSaving(s).afterTax), sortValue: (s) => calcSaving(s).afterTax },
+    { key: 'receive', label: '예상수령액', align: 'right', render: (s) => formatWon(calcSaving(s).maturityAmount), sortValue: (s) => calcSaving(s).maturityAmount },
   ]
   return (
     <TabCard note="현재저축액은 가입일부터 매달 빠짐없이 납입했다고 가정해서 계산해요.">
@@ -336,10 +340,10 @@ function LoansTab() {
       input: { type: 'select', options: Object.entries(LOAN_METHOD_LABEL).map(([value, label]) => ({ value, label })) },
       required: true,
     },
-    { key: 'monthly', label: '이번 달 상환액', align: 'right', render: (l) => formatWon(calcLoan(l).nextPayment) },
-    { key: 'interest', label: '총 이자', align: 'right', render: (l) => formatWon(calcLoan(l).totalInterest) },
-    { key: 'paid', label: '누적상환', align: 'right', render: (l) => formatWon(calcLoan(l).paid) },
-    { key: 'balance', label: '대출잔금', align: 'right', render: (l) => formatWon(calcLoan(l).balance) },
+    { key: 'monthly', label: '이번 달 상환액', align: 'right', render: (l) => formatWon(calcLoan(l).nextPayment), sortValue: (l) => calcLoan(l).nextPayment },
+    { key: 'interest', label: '총 이자', align: 'right', render: (l) => formatWon(calcLoan(l).totalInterest), sortValue: (l) => calcLoan(l).totalInterest },
+    { key: 'paid', label: '누적상환', align: 'right', render: (l) => formatWon(calcLoan(l).paid), sortValue: (l) => calcLoan(l).paid },
+    { key: 'balance', label: '대출잔금', align: 'right', render: (l) => formatWon(calcLoan(l).balance), sortValue: (l) => calcLoan(l).balance },
   ]
   return (
     <TabCard note="'상세'를 누르면 월별 상환 스케줄을 볼 수 있어요.">
