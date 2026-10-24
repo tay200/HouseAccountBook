@@ -73,13 +73,16 @@ export function useSaveStockPrice() {
 
 type PriceResult = { code: string; name?: string; price?: number; error?: string }
 
-/** Edge Function(stock-prices)을 불러 현재가를 받아오고 DB 에 저장한다. 실패한 종목 목록을 돌려준다. */
+/**
+ * Edge Function(stock-prices)을 불러 현재가를 받아오고 DB 에 저장한다. 실패한 종목 목록을 돌려준다.
+ * kr = 한국 종목코드, us = 미국 티커 (미국 종목이 있으면 환율도 함께 받아온다)
+ */
 export function useRefreshStockPrices() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (codes: string[]) => {
+    mutationFn: async ({ kr, us }: { kr: string[]; us: string[] }) => {
       const { data, error } = await supabase.functions.invoke<{ results: PriceResult[] }>('stock-prices', {
-        body: { codes },
+        body: { codes: kr, us, fx: true },
       })
       if (error) throw error
       const results = data?.results ?? []

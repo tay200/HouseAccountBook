@@ -10,6 +10,13 @@ export function formatWon(value: number) {
   return `${numberFormat.format(value)}원`
 }
 
+const usdFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/** 347.7 → '$347.70' */
+export function formatUsd(value: number) {
+  return `$${usdFormat.format(value)}`
+}
+
 function pad(n: number) {
   return String(n).padStart(2, '0')
 }

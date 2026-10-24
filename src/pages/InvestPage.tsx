@@ -1,11 +1,16 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { investAccountsApi, tradesApi, useRefreshStockPrices, useSaveStockPrice, useStockPrices } from '../api/tables'
 import AmountInput from '../components/AmountInput'
 import CrudTable, { type Column } from '../components/CrudTable'
 import { useLookups } from '../hooks/useLookups'
-import { formatNumber, formatWon } from '../lib/format'
+import { formatNumber, formatUsd, formatWon } from '../lib/format'
 import { calcTrade, holdings, investSummary } from '../lib/invest'
-import type { InvestAccount, StockPrice, Trade } from '../lib/types'
+import { FX_CODE, type InvestAccount, type Market, type StockPrice, type Trade } from '../lib/types'
+
+/** 해당 통화로 금액 표시 (KR=원, US=달러) */
+function formatLocal(value: number, market: Market) {
+  return market === 'US' ? formatUsd(value) : formatWon(value)
+}
 
 function signed(value: number) {
   return <span className={value > 0 ? 'text-red-600' : value < 0 ? 'text-blue-600' : ''}>{value > 0 ? '+' : ''}{formatWon(value)}</span>
@@ -50,8 +55,9 @@ export default function InvestPage() {
   const lastUpdated = prices.reduce((latest, p) => (p.updated_at > latest ? p.updated_at : latest), '')
 
   function handleRefresh() {
-    const codes = [...new Set(trades.filter((t) => !t.sell_date).map((t) => t.stock_code))]
-    refresh.mutate(codes, {
+    const open = trades.filter((t) => !t.sell_date)
+    const codesOf = (market: Market) => [...new Set(open.filter((t) => t.market === market).map((t) => t.stock_code))]
+    refresh.mutate({ kr: codesOf('KR'), us: codesOf('US') }, {
       onSuccess: (failed) => {
         if (failed.length > 0) alert(`일부 종목은 조회하지 못했어요. 현재가를 직접 입력해 주세요.\n${failed.map((f) => `${f.code}: ${f.error}`).join('\n')}`)
       },
@@ -59,21 +65,37 @@ export default function InvestPage() {
   }
 
   const accountOptions = accounts.map((a) => ({ value: a.id, label: a.name }))
+  const fxRender = (value: number | null, t: Trade) =>
+    t.market !== 'US' ? <span className="text-slate-300">-</span> : value ? formatNumber(value) : <span className="text-slate-400">현재</span>
   const tradeColumns: Column<Trade>[] = [
     { key: 'account_id', label: '계좌', input: { type: 'select', options: accountOptions }, required: true },
-    { key: 'stock_code', label: '종목코드', input: { type: 'text', placeholder: '000660' }, required: true },
+    {
+      key: 'market',
+      label: '시장',
+      input: { type: 'select', options: [{ value: 'KR', label: '한국' }, { value: 'US', label: '미국' }] },
+      required: true,
+    },
+    { key: 'stock_code', label: '종목코드', input: { type: 'text', placeholder: '000660 / AAPL' }, required: true },
     { key: 'stock_name', label: '종목명', input: { type: 'text' }, required: true },
     { key: 'buy_date', label: '매수일', input: { type: 'date' } },
-    { key: 'buy_price', label: '매수단가', input: { type: 'number' }, required: true, align: 'right' },
+    { key: 'buy_price', label: '매수단가', input: { type: 'number' }, required: true, align: 'right', render: (t) => formatLocal(t.buy_price, t.market) },
     { key: 'quantity', label: '수량', input: { type: 'number' }, required: true, align: 'right' },
+    { key: 'buy_fx_rate', label: '매수환율', input: { type: 'number' }, align: 'right', render: (t) => fxRender(t.buy_fx_rate, t) },
     { key: 'sell_date', label: '매도일', input: { type: 'date' } },
-    { key: 'sell_price', label: '매도단가', input: { type: 'number' }, align: 'right' },
-    { key: 'fee', label: '비용', input: { type: 'money' }, required: true, align: 'right' },
+    {
+      key: 'sell_price',
+      label: '매도단가',
+      input: { type: 'number' },
+      align: 'right',
+      render: (t) => (t.sell_price === null ? <span className="text-slate-300">-</span> : formatLocal(t.sell_price, t.market)),
+    },
+    { key: 'sell_fx_rate', label: '매도환율', input: { type: 'number' }, align: 'right', render: (t) => (t.sell_date ? fxRender(t.sell_fx_rate, t) : <span className="text-slate-300">-</span>) },
+    { key: 'fee', label: '비용(원)', input: { type: 'money' }, required: true, align: 'right' },
     {
       key: 'cost',
-      label: '매수금액',
+      label: '매수금액(원)',
       align: 'right',
-      render: (t) => formatWon(t.buy_price * t.quantity),
+      render: (t) => formatWon(Math.round(calcTrade(t, priceByCode).cost)),
     },
     {
       key: 'profit',
@@ -81,7 +103,7 @@ export default function InvestPage() {
       align: 'right',
       render: (t) => {
         const r = calcTrade(t, priceByCode)
-        return r.sold ? <>실현 {signed(r.realized)}</> : signed(r.unrealized)
+        return r.sold ? <>실현 {signed(Math.round(r.realized))}</> : signed(Math.round(r.unrealized))
       },
     },
     { key: 'memo', label: '메모', input: { type: 'text' } },
@@ -108,6 +130,10 @@ export default function InvestPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1 text-sm text-slate-600">
+            환율 USD/KRW
+            <PriceCell code={FX_CODE} price={priceByCode.get(FX_CODE)} market="US" format={(v) => `${formatNumber(v)}원`} />
+          </span>
           {lastUpdated && <span className="text-xs text-slate-500">현재가 갱신 {new Date(lastUpdated).toLocaleString('ko-KR')}</span>}
           <button className="btn btn-primary" onClick={handleRefresh} disabled={refresh.isPending || trades.length === 0}>
             {refresh.isPending ? '조회 중…' : '현재가 새로고침'}
@@ -202,15 +228,16 @@ export default function InvestPage() {
               <tr key={h.key}>
                 <td className="py-2">{accountName(h.accountId)}</td>
                 <td className="py-2">
+                  {h.market === 'US' && <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-500">US</span>}
                   {h.name} <span className="text-xs text-slate-400">{h.code}</span>
                 </td>
                 <td className="py-2 text-right">{formatNumber(h.quantity)}</td>
-                <td className="py-2 text-right">{formatWon(Math.round(h.cost / h.quantity))}</td>
+                <td className="py-2 text-right">{formatLocal(h.costLocal / h.quantity, h.market)}</td>
                 <td className="py-2 text-right">
-                  <PriceCell code={h.code} price={priceByCode.get(h.code)} />
+                  <PriceCell code={h.code} price={priceByCode.get(h.code)} market={h.market} format={(v) => formatLocal(v, h.market)} />
                 </td>
-                <td className="py-2 text-right">{formatWon(h.value)}</td>
-                <td className="py-2 text-right">{signed(h.unrealized)}</td>
+                <td className="py-2 text-right">{formatWon(Math.round(h.value))}</td>
+                <td className="py-2 text-right">{signed(Math.round(h.unrealized))}</td>
                 <td className="py-2 text-right">{rate(h.unrealized, h.cost)}</td>
               </tr>
             ))}
@@ -221,12 +248,18 @@ export default function InvestPage() {
 
       <div className="card">
         <h3 className="mb-1 font-semibold">매매 내역</h3>
-        <p className="mb-4 text-xs text-slate-500">매수 1번 = 1줄. 팔았으면 그 줄에 매도일과 매도단가를 채우세요.</p>
+        <p className="mb-4 text-xs text-slate-500">
+          매수 1번 = 1줄. 팔았으면 그 줄에 매도일과 매도단가를 채우세요. 미국 주식은 단가를 달러로 넣고, 매수환율을 넣으면 환차손익까지 계산해요
+          (비우면 현재 환율 기준).
+        </p>
         <CrudTable
           rows={trades}
           columns={tradeColumns}
-          defaults={{ account_id: accounts[0]?.id ?? '', fee: 0 }}
-          onSave={(values) => saveTrade.mutateAsync(values)}
+          defaults={{ account_id: accounts[0]?.id ?? '', market: 'KR', fee: 0 }}
+          onSave={(values) =>
+            // 미국 티커는 대문자로 통일 (aapl → AAPL)
+            saveTrade.mutateAsync({ ...values, stock_code: String(values.stock_code).trim().toUpperCase() })
+          }
           onDelete={(id) => deleteTrade.mutate(id)}
           addLabel="+ 매매 추가"
         />
@@ -255,8 +288,16 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
+type PriceCellProps = {
+  code: string
+  price: StockPrice | undefined
+  /** US 면 소수점(달러, 환율) 입력 */
+  market: Market
+  format: (value: number) => string
+}
+
 /** 클릭하면 입력칸으로 바뀌는 현재가 칸 */
-function PriceCell({ code, price }: { code: string; price: StockPrice | undefined }) {
+function PriceCell({ code, price, market, format }: PriceCellProps) {
   const save = useSaveStockPrice()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState<number | null>(price?.price ?? null)
@@ -264,20 +305,27 @@ function PriceCell({ code, price }: { code: string; price: StockPrice | undefine
   if (!editing) {
     return (
       <button className="rounded px-1 hover:bg-slate-100" onClick={() => { setValue(price?.price ?? null); setEditing(true) }}>
-        {price ? formatWon(price.price) : <span className="text-amber-600">입력 필요</span>}
+        {price ? format(price.price) : <span className="text-amber-600">입력 필요</span>}
       </button>
     )
   }
-  return (
-    <AmountInput
-      className="w-28 py-1"
-      value={value}
-      onChange={setValue}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && value) save.mutate({ stock_code: code, price: value }, { onSuccess: () => setEditing(false) })
-        if (e.key === 'Escape') setEditing(false)
-      }}
-      onBlur={() => setEditing(false)}
-    />
-  )
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && value) save.mutate({ stock_code: code, price: value }, { onSuccess: () => setEditing(false) })
+    if (e.key === 'Escape') setEditing(false)
+  }
+  if (market === 'US') {
+    return (
+      <input
+        type="number"
+        step="any"
+        autoFocus
+        className="input w-28 py-1 text-right"
+        value={value ?? ''}
+        onChange={(e) => setValue(e.target.value === '' ? null : Number(e.target.value))}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setEditing(false)}
+      />
+    )
+  }
+  return <AmountInput className="w-28 py-1" value={value} onChange={setValue} onKeyDown={handleKeyDown} onBlur={() => setEditing(false)} />
 }
