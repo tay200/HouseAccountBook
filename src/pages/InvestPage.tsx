@@ -30,8 +30,23 @@ export default function InvestPage() {
 
   const priceByCode = new Map(prices.map((p) => [p.stock_code, p]))
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
-  const summary = investSummary(trades, priceByCode)
+
+  // 계좌별 현황에서 체크한 계좌만 위쪽 합계에 넣는다 (예: 연금 계좌 제외)
+  const isIncluded = (a: InvestAccount) => a.included !== false
+  const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
+  const summary = investSummary(trades.filter((t) => includedIds.has(t.account_id)), priceByCode)
   const holdingList = holdings(trades, priceByCode)
+  const allIncluded = accounts.length > 0 && accounts.every(isIncluded)
+
+  function toggleAccount(a: InvestAccount) {
+    saveAccount.mutate({ id: a.id, included: !isIncluded(a) })
+  }
+
+  function toggleAll() {
+    for (const a of accounts) {
+      if (isIncluded(a) === allIncluded) saveAccount.mutate({ id: a.id, included: !allIncluded })
+    }
+  }
   const lastUpdated = prices.reduce((latest, p) => (p.updated_at > latest ? p.updated_at : latest), '')
 
   function handleRefresh() {
@@ -95,6 +110,9 @@ export default function InvestPage() {
         </div>
       </header>
 
+      <p className="-mb-3 text-xs text-slate-500">
+        아래 합계는 계좌별 현황에서 체크한 계좌 {includedIds.size}개 / 전체 {accounts.length}개 기준이에요.
+      </p>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="보유 매수금액" value={formatWon(summary.cost)} />
         <Stat label="평가금액" value={formatWon(summary.value)} />
@@ -103,10 +121,14 @@ export default function InvestPage() {
       </div>
 
       <div className="card">
-        <h3 className="mb-4 font-semibold">계좌별 현황</h3>
+        <h3 className="mb-1 font-semibold">계좌별 현황</h3>
+        <p className="mb-4 text-xs text-slate-500">체크한 계좌만 위쪽 합계에 들어가요. 연금처럼 따로 보고 싶은 계좌는 체크를 풀어 두세요.</p>
         <table className="w-full text-sm tabular-nums">
           <thead className="border-b border-slate-200 text-xs text-slate-500">
             <tr>
+              <th className="w-8 py-2 text-left">
+                <input type="checkbox" className="size-4 cursor-pointer" checked={allIncluded} onChange={toggleAll} aria-label="전체 선택" />
+              </th>
               <th className="py-2 text-left font-medium">계좌</th>
               <th className="py-2 text-right font-medium">종목 수</th>
               <th className="py-2 text-right font-medium">매수금액</th>
@@ -121,20 +143,39 @@ export default function InvestPage() {
             {accounts.map((a) => {
               const s = investSummary(trades.filter((t) => t.account_id === a.id), priceByCode)
               const count = holdingList.filter((h) => h.accountId === a.id).length
+              const included = isIncluded(a)
               return (
-                <tr key={a.id}>
+                <tr key={a.id} className={included ? '' : 'text-slate-400'}>
+                  <td className="py-2">
+                    <input type="checkbox" className="size-4 cursor-pointer" checked={included} onChange={() => toggleAccount(a)} aria-label={`${a.name} 합계에 포함`} />
+                  </td>
                   <td className="py-2">{a.name}</td>
                   <td className="py-2 text-right">{count}</td>
                   <td className="py-2 text-right">{formatWon(s.cost)}</td>
                   <td className="py-2 text-right">{formatWon(s.value)}</td>
-                  <td className="py-2 text-right">{signed(s.unrealized)}</td>
-                  <td className="py-2 text-right">{rate(s.unrealized, s.cost)}</td>
-                  <td className="py-2 text-right text-slate-500">{summary.value > 0 ? `${Math.round((s.value / summary.value) * 100)}%` : '-'}</td>
-                  <td className="py-2 text-right">{signed(s.realized)}</td>
+                  <td className="py-2 text-right">{included ? signed(s.unrealized) : formatWon(s.unrealized)}</td>
+                  <td className="py-2 text-right">{included ? rate(s.unrealized, s.cost) : '-'}</td>
+                  <td className="py-2 text-right text-slate-500">
+                    {included && summary.value > 0 ? `${Math.round((s.value / summary.value) * 100)}%` : '-'}
+                  </td>
+                  <td className="py-2 text-right">{included ? signed(s.realized) : formatWon(s.realized)}</td>
                 </tr>
               )
             })}
           </tbody>
+          <tfoot className="border-t border-slate-300 font-semibold">
+            <tr>
+              <td />
+              <td className="py-2">선택 합계</td>
+              <td className="py-2 text-right">{holdingList.filter((h) => includedIds.has(h.accountId)).length}</td>
+              <td className="py-2 text-right">{formatWon(summary.cost)}</td>
+              <td className="py-2 text-right">{formatWon(summary.value)}</td>
+              <td className="py-2 text-right">{signed(summary.unrealized)}</td>
+              <td className="py-2 text-right">{rate(summary.unrealized, summary.cost)}</td>
+              <td className="py-2 text-right text-slate-500">{summary.value > 0 ? '100%' : '-'}</td>
+              <td className="py-2 text-right">{signed(summary.realized)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 

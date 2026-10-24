@@ -57,6 +57,8 @@ export type InvestAccount = {
   name: string
   member_id: string | null
   memo: string | null
+  /** 투자 탭 합계에 포함할지 (마이그레이션 004 이전 데이터는 undefined → 포함으로 취급) */
+  included?: boolean
 }
 
 export type Trade = {
