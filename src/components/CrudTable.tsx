@@ -14,6 +14,8 @@ export type Column<T> = {
   /** 수정 가능한 열이면 DB 컬럼 이름, 계산 열이면 아무 고유 이름 */
   key: string
   label: string
+  /** 입력 폼에서만 쓸 더 자세한 이름표 (없으면 label) */
+  formLabel?: string
   /** 있으면 수정 가능한 열 */
   input?: FieldInput
   required?: boolean
@@ -251,7 +253,7 @@ function EditForm<T>({ title, columns, initial, onSave, onCancel }: EditFormProp
         {editable.map((c) => (
           <label key={c.key} className="space-y-1">
             <span className="text-xs text-slate-500">
-              {c.label}
+              {c.formLabel ?? c.label}
               {c.required && <span className="text-red-500"> *</span>}
             </span>
             <FieldEditor input={c.input!} value={draft[c.key]} onChange={(v) => set(c.key, v)} />

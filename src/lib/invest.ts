@@ -16,15 +16,16 @@ export function calcTrade(t: Trade, priceByCode: Map<string, StockPrice>) {
   const fxBuy = isUs ? (t.buy_fx_rate ?? fxNow) : 1
   const cost = t.buy_price * t.quantity * fxBuy
   const sold = t.sell_date !== null && t.sell_price !== null
+  // 수수료·세금(fee)은 해당 통화로 입력하므로 원화로 바꾼다
   if (sold) {
     const fxSell = isUs ? (t.sell_fx_rate ?? fxNow) : 1
-    const proceeds = t.sell_price! * t.quantity * fxSell - t.fee
+    const proceeds = t.sell_price! * t.quantity * fxSell - t.fee * fxSell
     return { cost, sold, value: 0, unrealized: 0, realized: proceeds - cost, currentPrice: null }
   }
   const currentPrice = priceByCode.get(t.stock_code)?.price ?? null
   // 현재가를 모르면 매수가로 평가 (손익 0)
   const value = (currentPrice ?? t.buy_price) * t.quantity * fxNow
-  return { cost, sold, value, unrealized: value - cost - t.fee, realized: 0, currentPrice }
+  return { cost, sold, value, unrealized: value - cost - t.fee * fxBuy, realized: 0, currentPrice }
 }
 
 export type Holding = {

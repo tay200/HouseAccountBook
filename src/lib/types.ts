@@ -75,7 +75,7 @@ export type Trade = {
   quantity: number
   sell_date: string | null
   sell_price: number | null
-  fee: number // 원화
+  fee: number // 수수료·세금, 해당 통화 (KR=원, US=달러)
   /** 매수·매도 당시 환율 (US 만). 비우면 현재 환율로 계산 */
   buy_fx_rate: number | null
   sell_fx_rate: number | null

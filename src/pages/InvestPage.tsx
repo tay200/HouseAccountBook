@@ -98,7 +98,15 @@ export default function InvestPage() {
       render: (t) => (t.sell_price === null ? <span className="text-slate-300">-</span> : formatLocal(t.sell_price, t.market)),
     },
     { key: 'sell_fx_rate', label: '매도환율', input: { type: 'number' }, align: 'right', render: (t) => (t.sell_date ? fxRender(t.sell_fx_rate, t) : <span className="text-slate-300">-</span>) },
-    { key: 'fee', label: '비용(원)', input: { type: 'money' }, required: true, align: 'right' },
+    {
+      key: 'fee',
+      label: '수수료·세금',
+      formLabel: '수수료·세금 (한국 원 / 미국 $)',
+      input: { type: 'number' },
+      required: true,
+      align: 'right',
+      render: (t) => formatLocal(t.fee, t.market),
+    },
     {
       key: 'cost',
       label: '매수금액(원)',
@@ -271,8 +279,8 @@ export default function InvestPage() {
         </div>
         {accounts.length === 0 && <p className="mb-2 text-xs text-amber-700">먼저 아래 '투자 계좌'에서 계좌를 추가해 주세요.</p>}
         <p className="mb-4 text-xs text-slate-500">
-          매수 1번 = 1줄. 팔았으면 그 줄에 매도일과 매도단가를 채우세요. 미국 주식은 단가를 달러로 넣고, 매수환율을 넣으면 환차손익까지 계산해요
-          (비우면 현재 환율 기준).
+          매수 1번 = 1줄. 팔았으면 그 줄에 매도일과 매도단가를 채우세요. 매수금액(원)은 단가 × 수량 × 환율로 자동 계산돼요.
+          미국 주식은 단가·수수료를 달러로 넣고, 매수환율을 넣으면 환차손익까지 계산해요 (비우면 현재 환율 기준). 수수료를 모르면 0.
         </p>
         <CrudTable
           rows={trades}
