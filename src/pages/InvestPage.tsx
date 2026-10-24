@@ -101,7 +101,12 @@ export default function InvestPage() {
   return (
     <section className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-bold">투자</h2>
+        <div>
+          <h2 className="text-2xl font-bold">투자</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            합계는 계좌별 현황에서 체크한 계좌 {includedIds.size}개 / 전체 {accounts.length}개 기준이에요.
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           {lastUpdated && <span className="text-xs text-slate-500">현재가 갱신 {new Date(lastUpdated).toLocaleString('ko-KR')}</span>}
           <button className="btn btn-primary" onClick={handleRefresh} disabled={refresh.isPending || trades.length === 0}>
@@ -110,9 +115,6 @@ export default function InvestPage() {
         </div>
       </header>
 
-      <p className="-mb-3 text-xs text-slate-500">
-        아래 합계는 계좌별 현황에서 체크한 계좌 {includedIds.size}개 / 전체 {accounts.length}개 기준이에요.
-      </p>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="보유 매수금액" value={formatWon(summary.cost)} />
         <Stat label="평가금액" value={formatWon(summary.value)} />

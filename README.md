@@ -68,3 +68,4 @@ insert into public.shares (owner_id, member_id) values (
 | `npm run build` | 타입 검사 + 배포용 빌드 (`dist/`) |
 | `npm run lint` | 코드 검사 |
 | `npm run preview` | 빌드 결과 미리보기 |
+| `node scripts/db.mjs <파일.sql>` | Supabase 에 SQL 실행 (환경변수 `SUPABASE_ACCESS_TOKEN` 필요) |

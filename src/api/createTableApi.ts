@@ -44,6 +44,7 @@ export function createTableApi<Row extends { id: string }>(table: string, option
 
   /** id 가 있으면 수정, 없으면 새로 추가 */
   function useSave() {
+    const queryClient = useQueryClient()
     const invalidate = useInvalidate()
     return useMutation({
       mutationFn: async ({ id, ...values }: Record<string, unknown>) => {
@@ -52,7 +53,15 @@ export function createTableApi<Row extends { id: string }>(table: string, option
           : await supabase.from(table).insert(values)
         if (error) throw error
       },
-      onSuccess: invalidate,
+      // 낙관적 업데이트: 수정은 서버 응답을 기다리지 않고 화면(캐시)부터 바꿔서 바로 반응하게 한다
+      onMutate: ({ id, ...values }) => {
+        if (!id) return
+        // 진행 중인 조회가 있으면 그 결과가 바꾼 값을 덮어쓰지 않도록 취소 (revert: false = 지금 데이터는 그대로 둠)
+        void queryClient.cancelQueries({ queryKey: key }, { revert: false })
+        queryClient.setQueryData<Row[]>(key, (rows) => rows?.map((r) => (r.id === id ? { ...r, ...values } : r)))
+      },
+      // 성공이든 실패든 서버 값으로 다시 맞춘다 (실패하면 화면이 원래 값으로 돌아감)
+      onSettled: invalidate,
     })
   }
 
