@@ -2,20 +2,25 @@
 import { todayString } from './format'
 import type { Deposit, InstallmentSaving, Loan, Term } from './types'
 
-/** 두 날짜 사이의 개월 수 (일자가 덜 지났으면 한 달을 빼서 '꽉 찬 개월'만 센다) */
+/**
+ * 두 날짜 사이의 개월 수 (일자가 덜 지났으면 한 달을 빼서 '꽉 찬 개월'만 센다).
+ * 은행처럼, 그 달에 같은 날짜가 없으면 말일을 같은 날로 본다. 예: 1/31 → 2/28 은 1개월
+ */
 export function monthsBetween(from: string, to: string) {
   const [y1, m1, d1] = from.split('-').map(Number)
   const [y2, m2, d2] = to.split('-').map(Number)
   let months = (y2 - y1) * 12 + (m2 - m1)
-  if (d2 < d1) months -= 1
+  const lastDayOfToMonth = new Date(y2, m2, 0).getDate() // 다음 달 0일 = 이번 달 말일
+  if (d2 < d1 && d2 !== lastDayOfToMonth) months -= 1
   return months
 }
 
 /** 가입 기간과 오늘까지 지난 기간 */
 function period(start: string, maturity: string) {
+  const today = todayString()
   const total = Math.max(monthsBetween(start, maturity), 0)
-  const elapsed = Math.min(Math.max(monthsBetween(start, todayString()), 0), total)
-  return { total, elapsed, remaining: total - elapsed, matured: todayString() >= maturity }
+  const elapsed = Math.min(Math.max(monthsBetween(start, today), 0), total)
+  return { total, elapsed, remaining: total - elapsed, matured: today >= maturity, started: today >= start }
 }
 
 /** 3년 이상이면 중기, 미만이면 단기 (엑셀 자산현황 기준) */
@@ -27,7 +32,8 @@ export function calcDeposit(d: Deposit) {
   const p = period(d.start_date, d.maturity_date)
   const interest = Math.round(d.principal * (d.rate / 100) * (p.total / 12))
   const afterTax = Math.round(interest * (1 - d.tax_rate / 100))
-  return { ...p, interest, afterTax, maturityAmount: d.principal + afterTax, current: d.principal }
+  // 가입일 전이면 아직 넣은 돈이 없다
+  return { ...p, interest, afterTax, maturityAmount: d.principal + afterTax, current: p.started ? d.principal : 0 }
 }
 
 export function calcSaving(s: InstallmentSaving) {
@@ -46,8 +52,8 @@ export function calcSaving(s: InstallmentSaving) {
   interest = Math.round(interest)
   const afterTax = Math.round(interest * (1 - s.tax_rate / 100))
   const principal = s.monthly_amount * n
-  // 오늘까지 빠짐없이 납입했다고 가정 (가입한 달 포함)
-  const current = s.monthly_amount * Math.min(p.elapsed + 1, n)
+  // 오늘까지 빠짐없이 납입했다고 가정 (가입한 달 포함, 가입일 전이면 0)
+  const current = p.started ? s.monthly_amount * Math.min(p.elapsed + 1, n) : 0
   return { ...p, principal, interest, afterTax, maturityAmount: principal + afterTax, current }
 }
 

@@ -39,7 +39,11 @@ export function useSaveBudget() {
       } else if (id) {
         result = await table.update({ amount }).eq('id', id)
       } else {
-        result = await table.insert({ month: monthStart(month), category_id: categoryId, amount })
+        // 같은 달·카테고리 예산이 이미 있으면 덮어쓴다 (빠르게 두 번 저장하거나 두 사람이 동시에 넣어도 중복 오류 없음)
+        result = await table.upsert(
+          { month: monthStart(month), category_id: categoryId, amount },
+          { onConflict: 'user_id,month,category_id' },
+        )
       }
       if (result.error) throw result.error
     },

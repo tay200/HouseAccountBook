@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useCategories, useDeleteCategory, useSaveCategory } from '../api/categories'
+import { countRows } from '../api/counts'
 import { NEW_CATEGORY_COLOR } from '../lib/defaults'
 import { TX_TYPE_LABEL, type Category, type TxType } from '../lib/types'
 
@@ -45,7 +46,7 @@ function MajorItem({ major, subs }: { major: Category; subs: Category[] }) {
         <button className="btn btn-text w-8 px-0" onClick={() => setOpen(!open)} aria-label={open ? '접기' : '펼치기'}>
           {open ? '▾' : '▸'}
         </button>
-        <CategoryRow category={major} />
+        <CategoryRow category={major} subIds={subs.map((s) => s.id)} />
         <span className="w-10 text-right text-xs text-slate-400">{subs.length || ''}</span>
       </div>
       {open && (
@@ -63,7 +64,7 @@ function MajorItem({ major, subs }: { major: Category; subs: Category[] }) {
 }
 
 /** 이름/색을 고치면 '저장' 버튼이 나타나는 한 줄 (소분류는 대분류 색을 따라가므로 색 없음) */
-function CategoryRow({ category }: { category: Category }) {
+function CategoryRow({ category, subIds = [] }: { category: Category; subIds?: string[] }) {
   const save = useSaveCategory()
   const remove = useDeleteCategory()
   const [name, setName] = useState(category.name)
@@ -71,9 +72,15 @@ function CategoryRow({ category }: { category: Category }) {
   const isMajor = !category.parent_id
   const changed = name.trim() !== category.name || color !== category.color
 
-  function handleDelete() {
-    const extra = isMajor ? '\n소분류도 함께 삭제되고, ' : '\n'
-    if (!confirm(`'${category.name}'을(를) 삭제할까요?${extra}이 카테고리의 거래는 '미분류'가 됩니다.`)) return
+  async function handleDelete() {
+    // 대분류를 지우면 소분류도 함께 지워진다 (DB: on delete cascade)
+    const ids = [category.id, ...subIds]
+    const [tx, budgets] = await Promise.all([countRows('transactions', 'category_id', ids), countRows('budgets', 'category_id', ids)])
+    const lines = [`'${category.name}'을(를) 삭제할까요?`]
+    if (subIds.length > 0) lines.push(`소분류 ${subIds.length}개도 함께 삭제됩니다.`)
+    if (tx > 0) lines.push(`거래 ${tx}건은 '미분류'가 됩니다.`)
+    if (budgets > 0) lines.push(`예산 ${budgets}건이 삭제됩니다.`)
+    if (!confirm(lines.join('\n'))) return
     remove.mutate(category.id)
   }
 

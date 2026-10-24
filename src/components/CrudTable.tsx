@@ -53,6 +53,11 @@ type Props<T extends { id: string }> = {
    * row 가 없으면 새 항목, 있으면 그 행 수정. 저장을 마치면 onDone, 취소하면 onCancel 을 부른다.
    */
   renderForm?: (props: { row?: T; onDone: () => void; onCancel: () => void }) => ReactNode
+  /**
+   * 삭제 전 확인 (기본: '삭제할까요?'). 함께 지워지거나 바뀌는 기록이 있으면 건수를 보여줄 때 쓴다.
+   * true 를 돌려주면 삭제한다.
+   */
+  confirmDelete?: (row: T) => boolean | Promise<boolean>
 }
 
 function display(value: unknown, input?: FieldInput): ReactNode {
@@ -87,6 +92,7 @@ export default function CrudTable<T extends { id: string }>({
   adding: addingProp,
   onAddingChange,
   renderForm,
+  confirmDelete,
 }: Props<T>) {
   // 지금 수정 중인 기존 행 id
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -164,7 +170,10 @@ export default function CrudTable<T extends { id: string }>({
                   setAdding(false)
                   setEditingId(row.id)
                 }}
-                onDelete={() => confirm('삭제할까요?') && onDelete(row.id)}
+                onDelete={async () => {
+                  const ok = confirmDelete ? await confirmDelete(row) : confirm('삭제할까요?')
+                  if (ok) onDelete(row.id)
+                }}
                 detail={renderDetail && openDetailId === row.id ? renderDetail(row) : null}
               />
             ))}
@@ -267,6 +276,8 @@ function EditForm<T>({ title, columns, initial, onSave, onCancel }: EditFormProp
     setSaving(true)
     try {
       await onSave(values)
+    } catch {
+      // 오류 알림은 main.tsx 의 MutationCache 가 띄운다. 폼은 열어 둔 채로 고쳐서 다시 저장할 수 있게 한다.
     } finally {
       setSaving(false)
     }

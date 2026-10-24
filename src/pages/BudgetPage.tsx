@@ -8,7 +8,7 @@ import MonthPicker from '../components/MonthPicker'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { formatWon, shiftMonth } from '../lib/format'
-import { sumExpenseBy } from '../lib/stats'
+import { isConsumption, sumGrouped } from '../lib/stats'
 import type { Budget, Category } from '../lib/types'
 
 export default function BudgetPage() {
@@ -19,9 +19,10 @@ export default function BudgetPage() {
   const copyBudgets = useCopyBudgets()
 
   // 예산은 지출 대분류 단위로 잡고, 소분류 거래는 대분류로 합산한다
+  // 사용액은 대시보드 '예산 대비'와 같이 소비성 지출만 센다 (저축성 지출은 쓴 돈이 아니라 모은 돈)
   const expenseCategories = majorCategories.filter((c) => c.type === 'expense')
   const budgetByCategory = new Map(budgets.map((b) => [b.category_id, b]))
-  const spentByCategory = sumExpenseBy(transactions, (t) => majorOf(t.category_id)?.id ?? '')
+  const spentByCategory = sumGrouped(transactions, isConsumption, (t) => majorOf(t.category_id)?.id ?? '')
 
   const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0)
   // 예산을 정한 카테고리에서 쓴 돈만 합산해야 '예산 대비'가 맞다
@@ -54,7 +55,7 @@ export default function BudgetPage() {
       </div>
 
       <div className="card">
-        <p className="mb-2 text-sm text-slate-500">금액을 입력하고 Enter 를 누르거나 다른 곳을 클릭하면 저장돼요. 비우면 예산이 삭제돼요.</p>
+        <p className="mb-2 text-sm text-slate-500">금액을 입력하고 Enter 를 누르거나 다른 곳을 클릭하면 저장돼요. 비우면 예산이 삭제돼요. 사용액에는 소비성 지출만 들어가요 (저축성 지출 제외).</p>
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 text-left text-xs text-slate-500">
             <tr>
@@ -115,6 +116,8 @@ function BudgetRow({ month, category, budget, spent }: RowProps) {
       <td className="py-2">
         <AmountInput
           className="w-40 py-1.5"
+          // 저장하는 동안은 잠가서, 저장이 끝나기 전에 다시 고쳐 쓴 값이 사라지지 않게 한다
+          disabled={save.isPending}
           value={amount}
           onChange={setAmount}
           placeholder="예산 없음"

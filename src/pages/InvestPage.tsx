@@ -7,6 +7,7 @@ import {
   useSaveStockPrice,
   useStockPrices,
 } from '../api/tables'
+import { describeCounts } from '../api/counts'
 import AmountInput from '../components/AmountInput'
 import CrudTable, { type Column } from '../components/CrudTable'
 import HoldingForm from '../components/HoldingForm'
@@ -15,7 +16,7 @@ import TradeForm from '../components/TradeForm'
 import { useLookups } from '../hooks/useLookups'
 import { useSort } from '../hooks/useSort'
 import { formatNumber, formatUsd, formatWon } from '../lib/format'
-import { analyzeInvest, currentFx, investSummary, tradeAmount } from '../lib/invest'
+import { analyzeInvest, currentFx, investSummary, oversellProblem, tradeAmount } from '../lib/invest'
 import { FX_CODE, SIDE_LABEL, type InvestAccount, type Market, type StockHolding, type StockPrice, type StockTrade, type TradeSide } from '../lib/types'
 
 /** 해당 통화로 금액 표시 (KR=원, US=달러) */
@@ -69,7 +70,31 @@ export default function InvestPage() {
 
   const priceByCode = new Map(prices.map((p) => [p.stock_code, p]))
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
-  const { positions, open, realizedByTrade } = analyzeInvest(stockHoldings, trades, priceByCode)
+  const { positions, open, realizedByTrade, oversold } = analyzeInvest(stockHoldings, trades, priceByCode)
+  const fxMissing = open.some((p) => p.fxMissing)
+
+  /** 매수 기록·보유분을 지웠을 때 뒤의 매도가 가진 수량을 넘게 되면 막는다 */
+  function confirmRemove(next: { holdings?: StockHolding[]; trades?: StockTrade[] }, question: string) {
+    const problem = oversellProblem(
+      { holdings: stockHoldings, trades },
+      { holdings: next.holdings ?? stockHoldings, trades: next.trades ?? trades },
+    )
+    if (problem) {
+      alert(`삭제할 수 없어요.\n${problem}\n먼저 그 매도 기록을 고치거나 지워 주세요.`)
+      return false
+    }
+    return confirm(question)
+  }
+
+  /** 투자 계좌를 지우면 그 계좌의 매매 기록·보유분도 함께 지워진다 (DB: on delete cascade) */
+  function confirmDeleteAccount(a: InvestAccount) {
+    const linked = describeCounts([
+      ['매매 기록', trades.filter((t) => t.account_id === a.id).length],
+      ['보유분', stockHoldings.filter((h) => h.account_id === a.id).length],
+    ])
+    const effect = linked ? `\n${linked}도 함께 삭제되고 되돌릴 수 없어요.` : ''
+    return confirm(`'${a.name}' 계좌를 삭제할까요?${effect}`)
+  }
 
   // 보유 종목 표 머리글 정렬. 단가는 한국·미국 종목을 같이 비교할 수 있게 원화로
   const fxNow = currentFx(priceByCode) ?? 0
@@ -125,7 +150,24 @@ export default function InvestPage() {
   const dash = <span className="text-slate-300">-</span>
   // 입력은 TradeForm 이 맡으므로 여기 열들은 표시용
   const tradeColumns: Column<StockTrade>[] = [
-    { key: 'side', label: '구분', render: (t) => <SideBadge side={t.side} />, sortValue: (t) => SIDE_LABEL[t.side] },
+    {
+      key: 'side',
+      label: '구분',
+      render: (t) => (
+        <>
+          <SideBadge side={t.side} />
+          {oversold.has(t.id) && (
+            <span
+              className="ml-1 cursor-help text-xs text-amber-600"
+              title={`이 매도 시점에 가진 수량은 ${formatNumber(oversold.get(t.id)!)}주예요. 넘게 판 수량은 손익 계산에서 뺐어요. 날짜나 수량을 확인해 주세요.`}
+            >
+              ⚠ 수량 초과
+            </span>
+          )}
+        </>
+      ),
+      sortValue: (t) => SIDE_LABEL[t.side],
+    },
     { key: 'trade_date', label: '날짜' },
     { key: 'account_id', label: '계좌', render: (t) => accountName(t.account_id), sortValue: (t) => accountName(t.account_id) },
     { key: 'market', label: '시장', render: (t) => marketLabel(t.market), sortValue: (t) => marketLabel(t.market) },
@@ -137,7 +179,16 @@ export default function InvestPage() {
       key: 'fx_rate',
       label: '환율',
       align: 'right',
-      render: (t) => (t.market !== 'US' ? dash : t.fx_rate ? formatNumber(t.fx_rate) : <span className="text-slate-400">현재</span>),
+      render: (t) =>
+        t.market !== 'US' ? (
+          dash
+        ) : t.fx_rate ? (
+          formatNumber(t.fx_rate)
+        ) : (
+          <span className="cursor-help text-amber-600" title="환율이 비어 있어 현재 환율로 계산 중이에요. [수정]에서 거래 당시 환율을 넣어 주세요.">
+            환율 없음
+          </span>
+        ),
     },
     { key: 'fee', label: '수수료·세금', align: 'right', render: (t) => formatLocal(t.fee, t.market) },
     {
@@ -183,11 +234,17 @@ export default function InvestPage() {
             <PriceCell code={FX_CODE} price={priceByCode.get(FX_CODE)} market="US" format={(v) => `${formatNumber(v)}원`} />
           </span>
           {lastUpdated && <span className="text-xs text-slate-500">현재가 갱신 {new Date(lastUpdated).toLocaleString('ko-KR')}</span>}
-          <button className="btn btn-primary" onClick={handleRefresh} disabled={refresh.isPending || open.length === 0}>
+          <button className="btn btn-primary" onClick={handleRefresh} disabled={refresh.isPending}>
             {refresh.isPending ? '조회 중…' : '현재가 새로고침'}
           </button>
         </div>
       </header>
+
+      {fxMissing && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          원/달러 환율을 아직 불러오지 못해서 미국 종목은 평가금액을 계산할 수 없어요 (합계에서 빠져 있어요). '현재가 새로고침'을 누르거나 위 환율을 직접 입력해 주세요.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="보유 매수금액" value={formatWon(summary.cost)} />
@@ -270,6 +327,7 @@ export default function InvestPage() {
         </p>
         {holdingForm !== null && (
           <HoldingForm
+            trades={trades}
             key={holdingForm === 'new' ? 'new' : holdingForm.id}
             accounts={accounts}
             holdings={stockHoldings}
@@ -311,9 +369,16 @@ export default function InvestPage() {
                   <td className="py-2 text-right">
                     <PriceCell code={p.code} price={priceByCode.get(p.code)} market={p.market} format={(v) => formatLocal(v, p.market)} />
                   </td>
-                  <td className="py-2 text-right">{formatWon(Math.round(p.value))}</td>
-                  <td className="py-2 text-right">{signed(Math.round(p.unrealized))}</td>
-                  <td className="py-2 text-right">{rate(p.unrealized, p.cost)}</td>
+                  {p.fxMissing ? (
+                    // 현재 환율을 몰라 평가할 수 없음 (0원으로 보이면 손실처럼 보이므로)
+                    <td colSpan={3} className="py-2 text-right text-amber-600">환율 필요</td>
+                  ) : (
+                    <>
+                      <td className="py-2 text-right">{formatWon(Math.round(p.value))}</td>
+                      <td className="py-2 text-right">{signed(Math.round(p.unrealized))}</td>
+                      <td className="py-2 text-right">{rate(p.unrealized, p.cost)}</td>
+                    </>
+                  )}
                   <td className="py-2 text-right whitespace-nowrap">
                     <button className="btn btn-text text-blue-600" onClick={() => startTrade('sell', p.key)}>매도</button>
                     {/* 직접 넣은 보유분이 있는 종목만 수정·삭제 (매매 기록은 매매 내역에서) */}
@@ -322,7 +387,12 @@ export default function InvestPage() {
                         <button className="btn btn-text" onClick={() => setHoldingForm(p.holding)} title="직접 넣은 보유분 수정">수정</button>
                         <button
                           className="btn btn-danger-text"
-                          onClick={() => confirm('직접 넣은 보유분을 삭제할까요? (매매 내역은 그대로)') && deleteHolding.mutate(p.holding!.id)}
+                          onClick={() =>
+                            confirmRemove(
+                              { holdings: stockHoldings.filter((h) => h.id !== p.holding!.id) },
+                              '직접 넣은 보유분을 삭제할까요? (매매 내역은 그대로)',
+                            ) && deleteHolding.mutate(p.holding!.id)
+                          }
                         >
                           삭제
                         </button>
@@ -352,13 +422,14 @@ export default function InvestPage() {
         {accounts.length === 0 && <p className="mb-2 text-xs text-amber-700">먼저 아래 '투자 계좌'에서 계좌를 추가해 주세요.</p>}
         <p className="mb-4 text-xs text-slate-500">
           매수 1건 = 1줄, 매도 1건 = 1줄. 매도의 실현손익은 그때까지의 평균단가로 계산해요 (이동평균).
-          미국 주식은 단가·수수료를 달러로 넣고, 환율을 비우면 현재 환율로 계산해요. 수수료를 모르면 0.
+          미국 주식은 단가·수수료를 달러로 넣고, 거래한 날의 환율을 꼭 넣어 주세요 (오늘 환율이 미리 채워져요). 수수료를 모르면 0.
         </p>
         <CrudTable
           rows={trades}
           columns={tradeColumns}
           onSave={(values) => saveTrade.mutateAsync(values)}
           onDelete={(id) => deleteTrade.mutate(id)}
+          confirmDelete={(t) => confirmRemove({ trades: trades.filter((x) => x.id !== t.id) }, `${SIDE_LABEL[t.side]} 기록을 삭제할까요?`)}
           adding={tradeForm !== null}
           onAddingChange={(opened) => setTradeForm(opened ? { side: 'buy' } : null)}
           renderForm={({ row, onDone, onCancel }) => (
@@ -368,6 +439,8 @@ export default function InvestPage() {
               side={row?.side ?? tradeForm?.side ?? 'buy'}
               accounts={accounts}
               positions={open}
+              holdings={stockHoldings}
+              trades={trades}
               priceByCode={priceByCode}
               row={row}
               initialPositionKey={tradeForm?.positionKey}
@@ -386,6 +459,7 @@ export default function InvestPage() {
           columns={accountColumns}
           onSave={(values) => saveAccount.mutateAsync(values)}
           onDelete={(id) => deleteAccount.mutate(id)}
+          confirmDelete={confirmDeleteAccount}
           addLabel="+ 계좌 추가"
         />
       </div>

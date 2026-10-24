@@ -8,10 +8,11 @@ type Props = {
   placeholder?: string
   onBlur?: () => void
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
+  disabled?: boolean
 }
 
 /** 입력하는 동안 '12,345' 처럼 쉼표를 찍어 보여주는 금액 입력칸. 값은 숫자로 다룬다. */
-export default function AmountInput({ value, onChange, className = '', placeholder = '0', onBlur, onKeyDown }: Props) {
+export default function AmountInput({ value, onChange, className = '', placeholder = '0', onBlur, onKeyDown, disabled }: Props) {
   return (
     <input
       type="text"
@@ -25,6 +26,7 @@ export default function AmountInput({ value, onChange, className = '', placehold
       }}
       onBlur={onBlur}
       onKeyDown={onKeyDown}
+      disabled={disabled}
     />
   )
 }

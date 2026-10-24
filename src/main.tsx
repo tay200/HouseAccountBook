@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router'
 import AuthGate from './auth/AuthGate.tsx'
 import './index.css'
+import { toUserMessage } from './lib/errors'
 import { router } from './router.tsx'
 
 // 서버(Supabase)에서 가져온 데이터를 캐싱하고 관리하는 TanStack Query의 중심 객체
@@ -13,11 +14,11 @@ const queryClient = new QueryClient({
     onError: (error) => {
       // 연달아 저장할 때 앞선 새로고침을 일부러 취소한 것은 에러가 아니다 (곧 다시 불러옴)
       if (isCancelledError(error)) return
-      alert(`데이터를 불러오지 못했습니다.\n${error.message}`)
+      alert(`데이터를 불러오지 못했습니다.\n${toUserMessage(error)}`)
     },
   }),
   mutationCache: new MutationCache({
-    onError: (error) => alert(`저장하지 못했습니다.\n${error.message}`),
+    onError: (error) => alert(`저장하지 못했습니다.\n${toUserMessage(error)}`),
   }),
 })
 

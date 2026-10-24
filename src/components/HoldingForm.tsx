@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { formatNumber, formatUsd, formatWon } from '../lib/format'
-import { currentFx, positionKey } from '../lib/invest'
-import type { InvestAccount, Market, StockHolding, StockPrice } from '../lib/types'
+import { codeProblem, currentFx, normalizeCode, oversellProblem, positionKey } from '../lib/invest'
+import type { InvestAccount, Market, StockHolding, StockPrice, StockTrade } from '../lib/types'
 import { toNumber, toText } from '../lib/form'
 import { Field, FormBox, inputCls, NumberInput } from './FormFields'
 
@@ -9,6 +9,8 @@ type Props = {
   accounts: InvestAccount[]
   /** 이미 있는 직접 입력 보유분 (같은 종목 중복 확인용) */
   holdings: StockHolding[]
+  /** 매매 기록 (보유분을 줄였을 때 뒤의 매도가 넘치는지 검사용) */
+  trades: StockTrade[]
   priceByCode: Map<string, StockPrice>
   /** 있으면 그 보유분을 수정 */
   row?: StockHolding
@@ -21,7 +23,7 @@ type Props = {
  * 매매 기록 없이 보유 종목을 직접 넣는 폼.
  * 예: 매매 내역이 남아 있지 않은 종목, 증권사 앱의 평균단가·수량을 그대로 옮길 때.
  */
-export default function HoldingForm({ accounts, holdings, priceByCode, row, onSave, onDone, onCancel }: Props) {
+export default function HoldingForm({ accounts, holdings, trades, priceByCode, row, onSave, onDone, onCancel }: Props) {
   const fxNow = currentFx(priceByCode)
   const [saving, setSaving] = useState(false)
   const [v, setV] = useState(() => ({
@@ -36,8 +38,13 @@ export default function HoldingForm({ accounts, holdings, priceByCode, row, onSa
   }))
   const set = (key: keyof typeof v, value: string) => setV((prev) => ({ ...prev, [key]: value }))
 
+  function changeMarket(market: Market) {
+    // 미국 주식으로 바꾸면 오늘 환율을 미리 채워 둔다 (실제 평균 매수환율을 알면 고쳐서 넣기)
+    setV((prev) => ({ ...prev, market, avg_fx_rate: market === 'US' && prev.avg_fx_rate === '' && fxNow ? String(fxNow) : prev.avg_fx_rate }))
+  }
+
   const isUs = v.market === 'US'
-  const code = v.stock_code.trim().toUpperCase()
+  const code = normalizeCode(v.market, v.stock_code)
   const qty = toNumber(v.quantity)
   const avg = toNumber(v.avg_price)
   // 같은 계좌·종목의 직접 입력 보유분은 하나만 (수량·평균단가는 그 줄에서 고친다)
@@ -47,11 +54,18 @@ export default function HoldingForm({ accounts, holdings, priceByCode, row, onSa
 
   let problem: string | null = null
   if (!v.account_id) problem = '계좌를 골라 주세요'
-  else if (!code) problem = '종목코드를 넣어 주세요'
+  else if (codeProblem(v.market, code)) problem = codeProblem(v.market, code)
   else if (!v.stock_name.trim()) problem = '종목명을 넣어 주세요'
   else if (!qty || qty <= 0) problem = '수량을 넣어 주세요'
   else if (avg === null || avg < 0) problem = '평균단가를 넣어 주세요'
   else if (duplicate) problem = '이 계좌에 같은 종목을 이미 직접 넣었어요. 그 줄의 [수정]으로 고쳐 주세요'
+  else if (isUs && !toNumber(v.avg_fx_rate))
+    problem = fxNow ? '평균 매수환율을 넣어 주세요' : "평균 매수환율을 넣어 주세요 ('현재가 새로고침'을 누르면 오늘 환율을 받아 와요)"
+  else if (row) {
+    // 보유분을 줄이거나 종목을 바꿨을 때 이 종목의 매도 기록이 가진 수량을 넘게 되면 막는다
+    const changed = { ...row, account_id: v.account_id, market: v.market, stock_code: code, quantity: qty }
+    problem = oversellProblem({ holdings, trades }, { holdings: holdings.map((h) => (h.id === row.id ? changed : h)), trades })
+  }
 
   const fx = isUs ? (toNumber(v.avg_fx_rate) ?? fxNow ?? 0) : 1
   const preview =
@@ -77,6 +91,8 @@ export default function HoldingForm({ accounts, holdings, priceByCode, row, onSa
     try {
       await onSave(row ? { ...values, id: row.id } : values)
       onDone()
+    } catch {
+      // 오류 알림은 main.tsx 의 MutationCache 가 띄운다. 폼은 열어 둔다.
     } finally {
       setSaving(false)
     }
@@ -101,7 +117,7 @@ export default function HoldingForm({ accounts, holdings, priceByCode, row, onSa
         </select>
       </Field>
       <Field label="시장" required>
-        <select className={inputCls} value={v.market} onChange={(e) => set('market', e.target.value)}>
+        <select className={inputCls} value={v.market} onChange={(e) => changeMarket(e.target.value as Market)}>
           <option value="KR">한국</option>
           <option value="US">미국</option>
         </select>
@@ -119,7 +135,7 @@ export default function HoldingForm({ accounts, holdings, priceByCode, row, onSa
         <NumberInput value={v.avg_price} onChange={(x) => set('avg_price', x)} />
       </Field>
       {isUs && (
-        <Field label="평균 매수환율 (원/$)">
+        <Field label="평균 매수환율 (원/$)" required>
           <NumberInput value={v.avg_fx_rate} onChange={(x) => set('avg_fx_rate', x)} />
         </Field>
       )}

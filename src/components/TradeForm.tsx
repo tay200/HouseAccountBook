@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { formatNumber, formatUsd, formatWon, todayString } from '../lib/format'
-import { currentFx, type Position } from '../lib/invest'
-import type { InvestAccount, Market, StockPrice, StockTrade, TradeSide } from '../lib/types'
+import { codeProblem, currentFx, normalizeCode, oversellProblem, type Position } from '../lib/invest'
+import type { InvestAccount, Market, StockHolding, StockPrice, StockTrade, TradeSide } from '../lib/types'
 import { toNumber, toText } from '../lib/form'
 import { Field, FormBox, inputCls, NumberInput } from './FormFields'
 
@@ -10,6 +10,9 @@ type Props = {
   accounts: InvestAccount[]
   /** 지금 가지고 있는 종목 (매도할 종목 고르기용) */
   positions: Position[]
+  /** 전체 보유분·매매 기록 (저장 전 '그 날짜에 가진 수량' 검사용) */
+  holdings: StockHolding[]
+  trades: StockTrade[]
   priceByCode: Map<string, StockPrice>
   /** 있으면 그 기록을 수정 */
   row?: StockTrade
@@ -26,7 +29,7 @@ type Props = {
  * - 매수: 계좌·종목을 직접 넣는다.
  * - 매도: 가지고 있는 종목 중에서 고른다 (가진 수량보다 많이 팔 수 없음).
  */
-export default function TradeForm({ side, accounts, positions, priceByCode, row, initialPositionKey, onSave, onDone, onCancel }: Props) {
+export default function TradeForm({ side, accounts, positions, holdings, trades, priceByCode, row, initialPositionKey, onSave, onDone, onCancel }: Props) {
   const fxNow = currentFx(priceByCode)
   const isEdit = row !== undefined
   const [saving, setSaving] = useState(false)
@@ -82,18 +85,44 @@ export default function TradeForm({ side, accounts, positions, priceByCode, row,
   const price = toNumber(v.price)
   const qty = toNumber(v.quantity)
   const fx = market === 'US' ? (toNumber(v.fx_rate) ?? fxNow ?? 0) : 1
-  // 수정 중인 매도는 이미 보유 수량에서 빠져 있으므로 되돌려서 계산
-  const sellable = (position?.quantity ?? 0) + (isEdit && isSell ? row.quantity : 0)
+  // 새 매도: 지금 가진 수량까지만 팔 수 있다 (수정은 아래 '그 날짜 기준 보유' 검사로 확인)
+  const sellable = position?.quantity ?? 0
+
+  // 저장할 값 (검사에도 같은 값을 쓴다)
+  const code = isSell ? (row?.stock_code ?? position?.code ?? '') : normalizeCode(v.market, v.stock_code)
+  const values: Record<string, unknown> = {
+    account_id: isSell ? (row?.account_id ?? position?.accountId) : v.account_id,
+    market,
+    stock_code: code,
+    stock_name: isSell ? (row?.stock_name ?? position?.name) : v.stock_name.trim(),
+    side,
+    trade_date: v.trade_date || null,
+    price,
+    quantity: qty,
+    fx_rate: market === 'US' ? toNumber(v.fx_rate) : null,
+    fee: toNumber(v.fee) ?? 0,
+    memo: v.memo.trim() || null,
+  }
 
   let problem: string | null = null
   if (isSell && !isEdit && !position) problem = '팔 종목을 골라 주세요'
   else if (!isSell && !v.account_id) problem = '계좌를 골라 주세요'
-  else if (!isSell && !v.stock_code.trim()) problem = '종목코드를 넣어 주세요'
+  else if (!isSell && codeProblem(v.market, code)) problem = codeProblem(v.market, code)
   else if (!isSell && !v.stock_name.trim()) problem = '종목명을 넣어 주세요'
-  else if (!isEdit && !v.trade_date) problem = `${isSell ? '매도' : '매수'}일을 넣어 주세요`
+  // 매도는 날짜가 있어야 '그때 가진 수량'을 알 수 있다. 매수는 엑셀에서 옮긴 날짜 없는 기록만 비워 둘 수 있음
+  else if ((isSell || !isEdit) && !v.trade_date) problem = `${isSell ? '매도' : '매수'}일을 넣어 주세요`
   else if (!price || price <= 0) problem = '단가를 넣어 주세요'
   else if (!qty || qty <= 0) problem = '수량을 넣어 주세요'
-  else if (isSell && qty > sellable + 1e-9) problem = `보유 수량(${formatNumber(sellable)}주)보다 많이 팔 수 없어요`
+  else if (market === 'US' && !toNumber(v.fx_rate))
+    problem = fxNow ? '환율을 넣어 주세요' : "환율을 넣어 주세요 ('현재가 새로고침'을 누르면 오늘 환율을 받아 와요)"
+  else if (isSell && !isEdit && qty > sellable + 1e-9) problem = `보유 수량(${formatNumber(sellable)}주)보다 많이 팔 수 없어요`
+  else {
+    // 이 기록을 반영했을 때 어떤 매도가 그 날짜에 가진 수량보다 많아지면 막는다
+    // 새 기록은 같은 날짜 안에서 맨 뒤로 ('9999' 는 어떤 입력 시각보다 뒤)
+    const candidate = { ...row, ...values, id: row?.id ?? '__new__', created_at: row?.created_at ?? '9999' } as StockTrade
+    const after = isEdit ? trades.map((t) => (t.id === row.id ? candidate : t)) : [...trades, candidate]
+    problem = oversellProblem({ holdings, trades }, { holdings, trades: after })
+  }
 
   let preview: ReactNode = null
   if (price && qty) {
@@ -114,34 +143,12 @@ export default function TradeForm({ side, accounts, positions, priceByCode, row,
   }
 
   async function handleSave() {
-    const base = isSell
-      ? {
-          account_id: row?.account_id ?? position!.accountId,
-          market,
-          stock_code: row?.stock_code ?? position!.code,
-          stock_name: row?.stock_name ?? position!.name,
-        }
-      : {
-          account_id: v.account_id,
-          market,
-          // 미국 티커는 대문자로 통일 (aapl → AAPL)
-          stock_code: v.stock_code.trim().toUpperCase(),
-          stock_name: v.stock_name.trim(),
-        }
-    const values: Record<string, unknown> = {
-      ...base,
-      side,
-      trade_date: v.trade_date || null,
-      price,
-      quantity: qty,
-      fx_rate: market === 'US' ? toNumber(v.fx_rate) : null,
-      fee: toNumber(v.fee) ?? 0,
-      memo: v.memo.trim() || null,
-    }
     setSaving(true)
     try {
       await onSave(isEdit ? { ...values, id: row.id } : values)
       onDone()
+    } catch {
+      // 오류 알림은 main.tsx 의 MutationCache 가 띄운다. 폼은 열어 둔다.
     } finally {
       setSaving(false)
     }
@@ -197,17 +204,17 @@ export default function TradeForm({ side, accounts, positions, priceByCode, row,
           </Field>
         </>
       )}
-      <Field label={isSell ? '매도일' : '매수일'} required={!isEdit}>
+      <Field label={isSell ? '매도일' : '매수일'} required={isSell || !isEdit}>
         <input type="date" className={inputCls} value={v.trade_date} onChange={(e) => set('trade_date', e.target.value)} />
       </Field>
       <Field label={`${isSell ? '매도' : '매수'}단가 (${unit})`} required>
         <NumberInput value={v.price} onChange={(x) => set('price', x)} />
       </Field>
-      <Field label={isSell && (position || isEdit) ? `수량 (최대 ${formatNumber(sellable)}주)` : '수량'} required>
+      <Field label={isSell && !isEdit && position ? `수량 (최대 ${formatNumber(sellable)}주)` : '수량'} required>
         <NumberInput value={v.quantity} onChange={(x) => set('quantity', x)} />
       </Field>
       {market === 'US' && (
-        <Field label={`${isSell ? '매도' : '매수'}환율 (원/$)`}>
+        <Field label={`${isSell ? '매도' : '매수'}환율 (원/$)`} required>
           <NumberInput value={v.fx_rate} onChange={(x) => set('fx_rate', x)} />
         </Field>
       )}

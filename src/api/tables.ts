@@ -18,8 +18,9 @@ import type {
 import { createTableApi } from './createTableApi'
 
 // '목록 + 추가/수정/삭제'만 필요한 테이블들
+// 사람을 지우면 이 테이블들의 member_id 가 비워지므로 함께 새로고침
 export const membersApi = createTableApi<Member>('members', {
-  alsoInvalidate: [['transactions'], ['ledger_entries']],
+  alsoInvalidate: [['transactions'], ['ledger_entries'], ['bank_accounts'], ['deposits'], ['installment_savings'], ['invest_accounts']],
 })
 export const goalsApi = createTableApi<Goal>('goals', { order: [{ column: 'year' }] })
 
