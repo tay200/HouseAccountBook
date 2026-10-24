@@ -53,7 +53,7 @@ export default function InvestPage() {
     { key: 'quantity', label: '수량', input: { type: 'number' }, required: true, align: 'right' },
     { key: 'sell_date', label: '매도일', input: { type: 'date' } },
     { key: 'sell_price', label: '매도단가', input: { type: 'number' }, align: 'right' },
-    { key: 'fee', label: '비용', input: { type: 'money' }, align: 'right' },
+    { key: 'fee', label: '비용', input: { type: 'money' }, required: true, align: 'right' },
     {
       key: 'cost',
       label: '매수금액',

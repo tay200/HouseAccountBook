@@ -271,7 +271,7 @@ function DepositsTab() {
     { key: 'maturity_date', label: '만기일', input: { type: 'date' }, required: true },
     { key: 'principal', label: '원금', input: { type: 'money' }, required: true, align: 'right' },
     { key: 'rate', label: '금리(%)', input: { type: 'number' }, required: true, align: 'right', render: (d) => pct(d.rate) },
-    { key: 'tax_rate', label: '세율(%)', input: { type: 'number' }, align: 'right', render: (d) => pct(d.tax_rate) },
+    { key: 'tax_rate', label: '세율(%)', input: { type: 'number' }, required: true, align: 'right', render: (d) => pct(d.tax_rate) },
     { key: 'remain', label: '남은 기간', render: (d) => (calcDeposit(d).matured ? '만기' : `${calcDeposit(d).remaining}개월`) },
     { key: 'after', label: '세후이자', align: 'right', render: (d) => formatWon(calcDeposit(d).afterTax) },
     { key: 'receive', label: '예상수령액', align: 'right', render: (d) => formatWon(calcDeposit(d).maturityAmount) },
@@ -298,7 +298,7 @@ function SavingsTab() {
     { key: 'maturity_date', label: '만기일', input: { type: 'date' }, required: true },
     { key: 'monthly_amount', label: '월 적립액', input: { type: 'money' }, required: true, align: 'right' },
     { key: 'rate', label: '금리(%)', input: { type: 'number' }, required: true, align: 'right', render: (s) => pct(s.rate) },
-    { key: 'tax_rate', label: '세율(%)', input: { type: 'number' }, align: 'right', render: (s) => pct(s.tax_rate) },
+    { key: 'tax_rate', label: '세율(%)', input: { type: 'number' }, required: true, align: 'right', render: (s) => pct(s.tax_rate) },
     {
       key: 'method',
       label: '방식',
