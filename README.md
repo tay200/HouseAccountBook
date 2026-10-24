@@ -51,6 +51,14 @@ npm run dev                  # http://localhost:5173
    `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` 등록
 3. `main` 브랜치에 push 하면 자동 배포
 
+### 4. 가계부 공유 (선택)
+다른 계정이 내 가계부를 함께 쓰게 하려면 SQL Editor 에서:
+```sql
+insert into public.shares (owner_id, member_id) values (
+  (select id from auth.users where email = '주인@이메일'),
+  (select id from auth.users where email = '함께쓸@이메일'));
+```
+
 > Publishable key 는 공개되어도 되는 키예요. 데이터는 DB의 RLS 규칙이 로그인한 본인에게만 허용합니다.
 
 ## 명령어
