@@ -13,7 +13,7 @@ export function useTransactions(fromMonth: string, toMonth: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('transactions')
-        .select('id, date, type, amount, category_id, payment_method_id, memo')
+        .select('id, date, type, kind, amount, discount, category_id, payment_method_id, member_id, memo')
         .gte('date', monthStart(fromMonth))
         .lt('date', monthStart(shiftMonth(toMonth, 1)))
         .order('date', { ascending: false })

@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { DEFAULT_CATEGORIES } from '../lib/defaults'
 import { supabase } from '../lib/supabase'
 import type { Category, CategoryInput } from '../lib/types'
 
@@ -12,7 +11,7 @@ export function useCategories() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('categories')
-        .select('id, name, type, color')
+        .select('id, name, type, color, parent_id')
         .order('created_at')
       if (error) throw error
       return data as Category[]
@@ -48,16 +47,5 @@ export function useDeleteCategory() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
     },
-  })
-}
-
-export function useAddDefaultCategories() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('categories').insert(DEFAULT_CATEGORIES)
-      if (error) throw error
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
   })
 }

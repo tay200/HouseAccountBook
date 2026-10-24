@@ -1,10 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import {
-  useAddDefaultPaymentMethods,
-  useDeletePaymentMethod,
-  usePaymentMethods,
-  useSavePaymentMethod,
-} from '../api/paymentMethods'
+import { useDeletePaymentMethod, usePaymentMethods, useSavePaymentMethod } from '../api/paymentMethods'
 import { PAYMENT_KIND_LABEL, type PaymentKind, type PaymentMethod } from '../lib/types'
 
 const KINDS = Object.keys(PAYMENT_KIND_LABEL) as PaymentKind[]
@@ -20,8 +15,7 @@ function KindSelect({ value, onChange }: { value: PaymentKind; onChange: (kind: 
 }
 
 export default function PaymentMethodSettings() {
-  const { data: paymentMethods = [], isSuccess } = usePaymentMethods()
-  const addDefaults = useAddDefaultPaymentMethods()
+  const { data: paymentMethods = [] } = usePaymentMethods()
   const save = useSavePaymentMethod()
   const [name, setName] = useState('')
   const [kind, setKind] = useState<PaymentKind>('card')
@@ -34,20 +28,13 @@ export default function PaymentMethodSettings() {
 
   return (
     <div className="card space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">결제수단 / 계좌</h3>
-        {isSuccess && paymentMethods.length === 0 && (
-          <button className="btn btn-primary" onClick={() => addDefaults.mutate()} disabled={addDefaults.isPending}>
-            '현금' 추가
-          </button>
-        )}
-      </div>
-      <ul className="divide-y divide-slate-100 md:max-w-xl">
+      <h3 className="font-semibold">결제수단 (지출구분)</h3>
+      <ul className="divide-y divide-slate-100">
         {paymentMethods.map((p) => (
           <PaymentMethodRow key={p.id} paymentMethod={p} />
         ))}
       </ul>
-      <form onSubmit={handleAdd} className="flex gap-2 md:max-w-xl">
+      <form onSubmit={handleAdd} className="flex gap-2">
         <KindSelect value={kind} onChange={setKind} />
         <input className="input flex-1" placeholder="예: 신한카드, 국민은행 월급통장" value={name} onChange={(e) => setName(e.target.value)} />
         <button className="btn btn-secondary" disabled={!name.trim() || save.isPending}>추가</button>

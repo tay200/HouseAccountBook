@@ -1,7 +1,11 @@
 import { createHashRouter } from 'react-router'
 import Layout from './components/Layout.tsx'
+import AssetsPage from './pages/AssetsPage.tsx'
 import BudgetPage from './pages/BudgetPage.tsx'
 import DashboardPage from './pages/DashboardPage.tsx'
+import InvestPage from './pages/InvestPage.tsx'
+import LedgerPage from './pages/LedgerPage.tsx'
+import ReportPage from './pages/ReportPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
 import TransactionsPage from './pages/TransactionsPage.tsx'
 
@@ -15,6 +19,10 @@ export const router = createHashRouter([
       { index: true, element: <DashboardPage /> },
       { path: 'transactions', element: <TransactionsPage /> },
       { path: 'budget', element: <BudgetPage /> },
+      { path: 'report', element: <ReportPage /> },
+      { path: 'invest', element: <InvestPage /> },
+      { path: 'assets', element: <AssetsPage /> },
+      { path: 'ledger', element: <LedgerPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

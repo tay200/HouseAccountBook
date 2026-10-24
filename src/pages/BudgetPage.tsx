@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useBudgets, useCopyBudgets, useSaveBudget } from '../api/budgets'
-import { useCategories } from '../api/categories'
 import { useTransactions } from '../api/transactions'
 import AmountInput from '../components/AmountInput'
 import BudgetBar from '../components/BudgetBar'
 import ColorDot from '../components/ColorDot'
 import MonthPicker from '../components/MonthPicker'
+import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { formatWon, shiftMonth } from '../lib/format'
 import { sumExpenseBy } from '../lib/stats'
@@ -13,14 +13,15 @@ import type { Budget, Category } from '../lib/types'
 
 export default function BudgetPage() {
   const [month, setMonth] = useMonth()
-  const { data: categories = [] } = useCategories()
+  const { majorCategories, majorOf } = useLookups()
   const { data: budgets = [], isSuccess: budgetsLoaded } = useBudgets(month)
   const { data: transactions = [] } = useTransactions(month, month)
   const copyBudgets = useCopyBudgets()
 
-  const expenseCategories = categories.filter((c) => c.type === 'expense')
+  // 예산은 지출 대분류 단위로 잡고, 소분류 거래는 대분류로 합산한다
+  const expenseCategories = majorCategories.filter((c) => c.type === 'expense')
   const budgetByCategory = new Map(budgets.map((b) => [b.category_id, b]))
-  const spentByCategory = sumExpenseBy(transactions, (t) => t.category_id ?? '')
+  const spentByCategory = sumExpenseBy(transactions, (t) => majorOf(t.category_id)?.id ?? '')
 
   const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0)
   // 예산을 정한 카테고리에서 쓴 돈만 합산해야 '예산 대비'가 맞다

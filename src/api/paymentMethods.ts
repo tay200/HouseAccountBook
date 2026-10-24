@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { DEFAULT_PAYMENT_METHODS } from '../lib/defaults'
 import { supabase } from '../lib/supabase'
 import type { PaymentMethod, PaymentMethodInput } from '../lib/types'
 
@@ -44,16 +43,5 @@ export function useDeletePaymentMethod() {
       queryClient.invalidateQueries({ queryKey: KEY })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
     },
-  })
-}
-
-export function useAddDefaultPaymentMethods() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('payment_methods').insert(DEFAULT_PAYMENT_METHODS)
-      if (error) throw error
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
   })
 }
