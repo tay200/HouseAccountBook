@@ -2,8 +2,9 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { investAccountsApi, tradesApi, useRefreshStockPrices, useSaveStockPrice, useStockPrices } from '../api/tables'
 import AmountInput from '../components/AmountInput'
 import CrudTable, { type Column } from '../components/CrudTable'
+import TradeForm, { type TradeMode } from '../components/TradeForm'
 import { useLookups } from '../hooks/useLookups'
-import { formatNumber, formatUsd, formatWon, todayString } from '../lib/format'
+import { formatNumber, formatUsd, formatWon } from '../lib/format'
 import { calcTrade, holdings, investSummary } from '../lib/invest'
 import { FX_CODE, type InvestAccount, type Market, type StockPrice, type Trade } from '../lib/types'
 
@@ -32,12 +33,13 @@ export default function InvestPage() {
   const deleteAccount = investAccountsApi.useDelete()
   const refresh = useRefreshStockPrices()
   const { members, memberName } = useLookups()
-  // 매매 내역의 새 입력 줄 열림 여부 (보유 종목 쪽 버튼에서도 열 수 있도록 여기서 관리)
-  const [addingTrade, setAddingTrade] = useState(false)
+  // 매매 입력 폼 열림 상태: 매수/매도 중 무엇으로 열지, 매도면 어떤 보유 종목인지
+  // (보유 종목 쪽 버튼에서도 열 수 있도록 여기서 관리)
+  const [tradeForm, setTradeForm] = useState<{ mode: TradeMode; holdingKey?: string } | null>(null)
   const tradesCardRef = useRef<HTMLDivElement>(null)
 
-  function startAddTrade() {
-    setAddingTrade(true)
+  function startTrade(mode: TradeMode, holdingKey?: string) {
+    setTradeForm({ mode, holdingKey })
     tradesCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -72,41 +74,33 @@ export default function InvestPage() {
     })
   }
 
-  const accountOptions = accounts.map((a) => ({ value: a.id, label: a.name }))
   const fxRender = (value: number | null, t: Trade) =>
     t.market !== 'US' ? <span className="text-slate-300">-</span> : value ? formatNumber(value) : <span className="text-slate-400">현재</span>
+  // 입력은 TradeForm 이 맡으므로 여기 열들은 표시용
   const tradeColumns: Column<Trade>[] = [
-    { key: 'account_id', label: '계좌', input: { type: 'select', options: accountOptions }, required: true },
     {
-      key: 'market',
-      label: '시장',
-      input: { type: 'select', options: [{ value: 'KR', label: '한국' }, { value: 'US', label: '미국' }] },
-      required: true,
+      key: 'state',
+      label: '구분',
+      render: (t) =>
+        t.sell_date ? <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700">매도</span> : <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">보유</span>,
     },
-    { key: 'stock_code', label: '종목코드', input: { type: 'text', placeholder: '000660 / AAPL' }, required: true },
-    { key: 'stock_name', label: '종목명', input: { type: 'text' }, required: true },
-    { key: 'buy_date', label: '매수일', input: { type: 'date' } },
-    { key: 'buy_price', label: '매수단가', input: { type: 'number' }, required: true, align: 'right', render: (t) => formatLocal(t.buy_price, t.market) },
-    { key: 'quantity', label: '수량', input: { type: 'number' }, required: true, align: 'right' },
-    { key: 'buy_fx_rate', label: '매수환율', input: { type: 'number' }, align: 'right', render: (t) => fxRender(t.buy_fx_rate, t) },
-    { key: 'sell_date', label: '매도일', input: { type: 'date' } },
+    { key: 'account_id', label: '계좌', render: (t) => accountName(t.account_id) },
+    { key: 'market', label: '시장', render: (t) => (t.market === 'US' ? '미국' : '한국') },
+    { key: 'stock_code', label: '종목코드' },
+    { key: 'stock_name', label: '종목명' },
+    { key: 'buy_date', label: '매수일' },
+    { key: 'buy_price', label: '매수단가', align: 'right', render: (t) => formatLocal(t.buy_price, t.market) },
+    { key: 'quantity', label: '수량', align: 'right', render: (t) => formatNumber(t.quantity) },
+    { key: 'buy_fx_rate', label: '매수환율', align: 'right', render: (t) => fxRender(t.buy_fx_rate, t) },
+    { key: 'sell_date', label: '매도일' },
     {
       key: 'sell_price',
       label: '매도단가',
-      input: { type: 'number' },
       align: 'right',
       render: (t) => (t.sell_price === null ? <span className="text-slate-300">-</span> : formatLocal(t.sell_price, t.market)),
     },
-    { key: 'sell_fx_rate', label: '매도환율', input: { type: 'number' }, align: 'right', render: (t) => (t.sell_date ? fxRender(t.sell_fx_rate, t) : <span className="text-slate-300">-</span>) },
-    {
-      key: 'fee',
-      label: '수수료·세금',
-      formLabel: '수수료·세금 (한국 원 / 미국 $)',
-      input: { type: 'number' },
-      required: true,
-      align: 'right',
-      render: (t) => formatLocal(t.fee, t.market),
-    },
+    { key: 'sell_fx_rate', label: '매도환율', align: 'right', render: (t) => (t.sell_date ? fxRender(t.sell_fx_rate, t) : <span className="text-slate-300">-</span>) },
+    { key: 'fee', label: '수수료·세금', align: 'right', render: (t) => formatLocal(t.fee, t.market) },
     {
       key: 'cost',
       label: '매수금액(원)',
@@ -122,7 +116,7 @@ export default function InvestPage() {
         return r.sold ? <>실현 {signed(Math.round(r.realized))}</> : signed(Math.round(r.unrealized))
       },
     },
-    { key: 'memo', label: '메모', input: { type: 'text' } },
+    { key: 'memo', label: '메모' },
   ]
 
   const accountColumns: Column<InvestAccount>[] = [
@@ -226,12 +220,12 @@ export default function InvestPage() {
       <div className="card">
         <div className="mb-1 flex items-center justify-between">
           <h3 className="font-semibold">보유 종목</h3>
-          <button className="btn btn-primary" onClick={startAddTrade} disabled={accounts.length === 0}>
+          <button className="btn btn-primary" onClick={() => startTrade('buy')} disabled={accounts.length === 0}>
             + 매수 추가
           </button>
         </div>
         <p className="mb-4 text-xs text-slate-500">
-          보유 종목은 매매 내역에서 아직 팔지 않은 것을 모아서 보여줘요. 새로 산 종목은 '+ 매수 추가'로 매매 내역에 넣으세요.{' '}현재가를 클릭하고 금액을 입력한 뒤 Enter 를 누르면 직접 고칠 수 있어요. 자동 조회가 안 되는 종목에 쓰세요.</p>
+          보유 종목은 매매 내역에서 아직 팔지 않은 것을 모아서 보여줘요. 새로 산 종목은 '+ 매수 추가', 판 종목은 줄 오른쪽 '매도'로 넣으세요.{' '}현재가를 클릭하고 금액을 입력한 뒤 Enter 를 누르면 직접 고칠 수 있어요. 자동 조회가 안 되는 종목에 쓰세요.</p>
         <table className="w-full text-sm tabular-nums">
           <thead className="border-b border-slate-200 text-xs text-slate-500">
             <tr>
@@ -243,6 +237,7 @@ export default function InvestPage() {
               <th className="py-2 text-right font-medium">평가금액</th>
               <th className="py-2 text-right font-medium">평가손익</th>
               <th className="py-2 text-right font-medium">수익률</th>
+              <th className="w-16" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -254,13 +249,16 @@ export default function InvestPage() {
                   {h.name} <span className="text-xs text-slate-400">{h.code}</span>
                 </td>
                 <td className="py-2 text-right">{formatNumber(h.quantity)}</td>
-                <td className="py-2 text-right">{formatLocal(h.costLocal / h.quantity, h.market)}</td>
+                <td className="py-2 text-right">{formatLocal(h.market === 'US' ? h.costLocal / h.quantity : Math.round(h.costLocal / h.quantity), h.market)}</td>
                 <td className="py-2 text-right">
                   <PriceCell code={h.code} price={priceByCode.get(h.code)} market={h.market} format={(v) => formatLocal(v, h.market)} />
                 </td>
                 <td className="py-2 text-right">{formatWon(Math.round(h.value))}</td>
                 <td className="py-2 text-right">{signed(Math.round(h.unrealized))}</td>
                 <td className="py-2 text-right">{rate(h.unrealized, h.cost)}</td>
+                <td className="py-2 text-right">
+                  <button className="btn btn-text text-blue-600" onClick={() => startTrade('sell', h.key)}>매도</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -271,28 +269,39 @@ export default function InvestPage() {
       <div className="card scroll-mt-4" ref={tradesCardRef}>
         <div className="mb-1 flex items-center justify-between">
           <h3 className="font-semibold">매매 내역</h3>
-          {!addingTrade && (
-            <button className="btn btn-primary" onClick={startAddTrade} disabled={accounts.length === 0}>
+          {!tradeForm && (
+            <button className="btn btn-primary" onClick={() => startTrade('buy')} disabled={accounts.length === 0}>
               + 매매 추가
             </button>
           )}
         </div>
         {accounts.length === 0 && <p className="mb-2 text-xs text-amber-700">먼저 아래 '투자 계좌'에서 계좌를 추가해 주세요.</p>}
         <p className="mb-4 text-xs text-slate-500">
-          매수 1번 = 1줄. 팔았으면 그 줄에 매도일과 매도단가를 채우세요. 매수금액(원)은 단가 × 수량 × 환율로 자동 계산돼요.
-          미국 주식은 단가·수수료를 달러로 넣고, 매수환율을 넣으면 환차손익까지 계산해요 (비우면 현재 환율 기준). 수수료를 모르면 0.
+          매수 1번 = 1줄. 매도를 넣으면 먼저 산 줄부터 매도일·매도단가가 채워지고, 일부만 팔면 그 줄이 판 것과 남은 것으로 나뉘어요.
+          매수금액(원)은 단가 × 수량 × 환율로 자동 계산돼요. 미국 주식은 단가·수수료를 달러로 넣으세요. 수수료를 모르면 0.
         </p>
         <CrudTable
           rows={trades}
           columns={tradeColumns}
-          defaults={{ account_id: accounts[0]?.id ?? '', market: 'KR', fee: 0, buy_date: todayString() }}
-          onSave={(values) =>
-            // 미국 티커는 대문자로 통일 (aapl → AAPL)
-            saveTrade.mutateAsync({ ...values, stock_code: String(values.stock_code).trim().toUpperCase() })
-          }
+          onSave={(values) => saveTrade.mutateAsync(values)}
           onDelete={(id) => deleteTrade.mutate(id)}
-          adding={addingTrade}
-          onAddingChange={setAddingTrade}
+          adding={tradeForm !== null}
+          onAddingChange={(open) => setTradeForm(open ? { mode: 'buy' } : null)}
+          renderForm={({ row, onDone, onCancel }) => (
+            <TradeForm
+              // 다른 보유 종목의 '매도'를 누르면 폼을 새로 연다
+              key={row ? row.id : `${tradeForm?.mode}-${tradeForm?.holdingKey ?? ''}`}
+              accounts={accounts}
+              trades={trades}
+              priceByCode={priceByCode}
+              row={row}
+              initialMode={tradeForm?.mode}
+              initialHoldingKey={tradeForm?.holdingKey}
+              onSave={(values) => saveTrade.mutateAsync(values)}
+              onDone={onDone}
+              onCancel={onCancel}
+            />
+          )}
         />
       </div>
 

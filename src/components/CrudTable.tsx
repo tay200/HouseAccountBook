@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatNumber, formatWon } from '../lib/format'
 import AmountInput from './AmountInput'
 
@@ -44,6 +44,11 @@ type Props<T extends { id: string }> = {
    */
   adding?: boolean
   onAddingChange?: (adding: boolean) => void
+  /**
+   * 열 정의로 만드는 기본 폼 대신 쓸 전용 입력 폼 (예: 매수/매도를 골라 입력하는 매매 폼).
+   * row 가 없으면 새 항목, 있으면 그 행 수정. 저장을 마치면 onDone, 취소하면 onCancel 을 부른다.
+   */
+  renderForm?: (props: { row?: T; onDone: () => void; onCancel: () => void }) => ReactNode
 }
 
 function display(value: unknown, input?: FieldInput): ReactNode {
@@ -77,6 +82,7 @@ export default function CrudTable<T extends { id: string }>({
   renderDetail,
   adding: addingProp,
   onAddingChange,
+  renderForm,
 }: Props<T>) {
   // 지금 수정 중인 기존 행 id
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -92,7 +98,15 @@ export default function CrudTable<T extends { id: string }>({
 
   return (
     <div>
-      {adding && (
+      {adding && renderForm && (
+        <Fragment key="new">{renderForm({ onDone: () => setAdding(false), onCancel: () => setAdding(false) })}</Fragment>
+      )}
+      {editingRow && renderForm && (
+        <Fragment key={editingRow.id}>
+          {renderForm({ row: editingRow, onDone: () => setEditingId(null), onCancel: () => setEditingId(null) })}
+        </Fragment>
+      )}
+      {adding && !renderForm && (
         <EditForm
           key="new"
           title="새 항목"
@@ -102,7 +116,7 @@ export default function CrudTable<T extends { id: string }>({
           onSave={(values) => onSave(values).then(() => setAdding(false))}
         />
       )}
-      {editingRow && (
+      {editingRow && !renderForm && (
         <EditForm
           key={editingRow.id}
           title="수정"

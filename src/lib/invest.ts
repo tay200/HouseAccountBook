@@ -75,6 +75,61 @@ export function holdings(trades: Trade[], priceByCode: Map<string, StockPrice>):
   return [...map.values()]
 }
 
+export type SellInput = {
+  quantity: number
+  sell_date: string
+  sell_price: number
+  sell_fx_rate: number | null
+  /** 이번 매도의 수수료·세금 (해당 통화) */
+  fee: number
+}
+
+// 소수 주식(미국 소수점 거래)의 계산 오차를 감안한 비교 여유
+const EPS = 1e-9
+const round = (v: number, digits: number) => Math.round(v * 10 ** digits) / 10 ** digits
+
+/**
+ * 매도 입력을 DB 에 저장할 변경 목록으로 바꾼다. (id 있음 = 수정, 없음 = 새 줄)
+ * 매매 내역은 '매수 1번 = 1줄' 구조라서, 먼저 산 줄부터 차례로 매도 정보를 채운다 (선입선출).
+ * 한 줄의 일부만 팔면 판 만큼을 새 줄로 떼어 내고 원래 줄은 수량을 줄인다.
+ * 매수 수수료는 수량 비율로 나누고, 매도 수수료는 판 수량 비율로 각 줄에 더한다.
+ */
+export function planSell(lots: Trade[], sell: SellInput): Record<string, unknown>[] {
+  // 매수일 순 (같은 날이면 입력한 순서 유지)
+  const sorted = [...lots].sort((a, b) => (a.buy_date ?? '').localeCompare(b.buy_date ?? ''))
+  const soldFields = { sell_date: sell.sell_date, sell_price: sell.sell_price, sell_fx_rate: sell.sell_fx_rate }
+  const sellFee = (quantity: number) => (sell.fee * quantity) / sell.quantity
+  const writes: Record<string, unknown>[] = []
+  let remaining = sell.quantity
+  for (const lot of sorted) {
+    if (remaining <= EPS) break
+    if (lot.quantity <= remaining + EPS) {
+      // 이 줄은 전부 판다
+      writes.push({ id: lot.id, ...soldFields, fee: round(lot.fee + sellFee(lot.quantity), 2) })
+      remaining -= lot.quantity
+    } else {
+      // 일부만 판다: 판 부분을 새 줄로 먼저 만들고 (실패해도 보유 수량이 사라지지 않도록) 원래 줄을 줄인다
+      const buyFee = (lot.fee * remaining) / lot.quantity
+      writes.push({
+        account_id: lot.account_id,
+        market: lot.market,
+        stock_code: lot.stock_code,
+        stock_name: lot.stock_name,
+        buy_date: lot.buy_date,
+        buy_price: lot.buy_price,
+        buy_fx_rate: lot.buy_fx_rate,
+        memo: lot.memo,
+        quantity: round(remaining, 8),
+        ...soldFields,
+        fee: round(buyFee + sellFee(remaining), 2),
+      })
+      writes.push({ id: lot.id, quantity: round(lot.quantity - remaining, 8), fee: round(lot.fee - buyFee, 2) })
+      remaining = 0
+    }
+  }
+  return writes
+}
+
 /** 투자 전체 요약 (원화) */
 export function investSummary(trades: Trade[], priceByCode: Map<string, StockPrice>) {
   let cost = 0
