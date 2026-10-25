@@ -15,6 +15,7 @@ import HoldingsPieCard from './invest/HoldingsPieCard'
 import HoldingsTable from './invest/HoldingsTable'
 import InvestTrendCard from './invest/InvestTrendCard'
 import PriceCell from './invest/PriceCell'
+import RealizedCard from './invest/RealizedCard'
 import { tradeColumns } from './invest/tradeColumns'
 
 export default function InvestPage() {
@@ -169,7 +170,10 @@ export default function InvestPage() {
 
       <AccountSummaryCard accounts={accounts} positions={positions} summary={summary} />
 
-      <HoldingsPieCard accounts={accounts} positions={positions} />
+      <div className="grid gap-6 xl:grid-cols-2">
+        <HoldingsPieCard accounts={accounts} positions={positions} />
+        <RealizedCard accounts={accounts} trades={trades} realizedByTrade={realizedByTrade} />
+      </div>
 
       <InvestTrendCard accounts={accounts} positions={positions} summary={summary} />
 

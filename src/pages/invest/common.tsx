@@ -9,7 +9,7 @@ export function SideBadge({ side }: { side: TradeSide }) {
 }
 
 /** 종목 이름 칸: 미국 종목이면 US 표시 + 이름 + 회색 종목코드 */
-export function StockName({ position: p }: { position: Position }) {
+export function StockName({ position: p }: { position: Pick<Position, 'market' | 'name' | 'code'> }) {
   return (
     <>
       {p.market === 'US' && <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-500">US</span>}

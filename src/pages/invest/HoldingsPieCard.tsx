@@ -32,7 +32,8 @@ export default function HoldingsPieCard({ accounts, positions }: Props) {
     s.value += p.value
     byStock.set(key, s)
   }
-  const sorted = [...byStock].map(([key, s]) => ({ key, ...s })).sort((a, b) => b.value - a.value)
+  // 미국 종목은 환율을 곱해 소수점이 생기므로 원 단위로 반올림
+  const sorted = [...byStock].map(([key, s]) => ({ key, name: s.name, value: Math.round(s.value) })).sort((a, b) => b.value - a.value)
   const top = sorted.length > COLORS.length ? sorted.slice(0, COLORS.length) : sorted
   const rest = sorted.slice(top.length)
   const slices: Slice[] = top.map((s, i) => ({ ...s, color: COLORS[i] }))
@@ -57,8 +58,8 @@ export default function HoldingsPieCard({ accounts, positions }: Props) {
       {slices.length === 0 ? (
         <p className="py-6 text-center text-sm text-slate-400">보유 중인 종목이 없어요.</p>
       ) : (
-        <div className="grid items-center gap-6 md:grid-cols-[240px_1fr]">
-          <div className="relative h-60">
+        <div className="grid items-center gap-6 sm:grid-cols-[200px_1fr]">
+          <div className="relative h-52">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 {/* 조각 사이 2px 흰 틈으로 경계를 구분한다 (한 조각뿐이면 틈이 이음매처럼 보여서 뺀다) */}
