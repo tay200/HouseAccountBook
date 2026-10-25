@@ -1,4 +1,4 @@
-import { FX_CODE, type InvestAccount, type Market, type StockHolding, type StockPrice, type StockTrade } from './types'
+import { FX_CODE, type InvestAccount, type InvestIncome, type Market, type StockHolding, type StockPrice, type StockTrade } from './types'
 
 /** 투자 탭 합계에 넣는 계좌인지 ('합계 포함' 체크. 예전 데이터는 값이 없으면 포함) */
 export const isIncluded = (a: InvestAccount) => a.included !== false
@@ -144,6 +144,18 @@ export function analyzeInvest(holdings: StockHolding[], trades: StockTrade[], pr
 }
 
 /** 종목 현황 합계 (원 단위 반올림) */
+/**
+ * 합계에 직접 입력한 수익을 더한다 (incomes 는 같은 계좌 범위로 걸러서 넘긴다)
+ *   realized = 매도 실현손익 + 판매수익,  dividend = 배당금
+ *   earned   = realized + dividend (월별 기록의 '수익' 계산용 누계)
+ */
+export function withIncomes(s: ReturnType<typeof investSummary>, incomes: InvestIncome[]) {
+  const sum = (kind: InvestIncome['kind']) => incomes.filter((i) => i.kind === kind).reduce((total, i) => total + Number(i.amount), 0)
+  const realized = s.realized + sum('sale')
+  const dividend = sum('dividend')
+  return { ...s, realized, dividend, earned: realized + dividend }
+}
+
 export function investSummary(positions: Position[]) {
   let cost = 0
   let value = 0

@@ -1,18 +1,20 @@
 import { investAccountsApi } from '../../api/tables'
 import { ProfitRate, SignedWon } from '../../components/Numbers'
 import { formatWon } from '../../lib/format'
-import { investSummary, isIncluded, type Position } from '../../lib/invest'
-import type { InvestAccount } from '../../lib/types'
+import { investSummary, isIncluded, withIncomes, type Position } from '../../lib/invest'
+import type { InvestAccount, InvestIncome } from '../../lib/types'
 
 type Props = {
   accounts: InvestAccount[]
   positions: Position[]
+  /** 직접 입력한 판매수익·배당금 */
+  incomes: InvestIncome[]
   /** 체크한 계좌들의 합계 */
-  summary: ReturnType<typeof investSummary>
+  summary: ReturnType<typeof withIncomes>
 }
 
 /** 계좌별 현황. 체크한 계좌만 위쪽 합계에 들어간다 (예: 연금 계좌 제외) */
-export default function AccountSummaryCard({ accounts, positions, summary }: Props) {
+export default function AccountSummaryCard({ accounts, positions, incomes, summary }: Props) {
   const saveAccount = investAccountsApi.useSave()
   const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
   const allIncluded = accounts.length > 0 && accounts.every(isIncluded)
@@ -42,11 +44,12 @@ export default function AccountSummaryCard({ accounts, positions, summary }: Pro
             <th className="py-2 text-right font-medium">수익률</th>
             <th className="py-2 text-right font-medium">비중</th>
             <th className="py-2 text-right font-medium">실현손익</th>
+            <th className="py-2 text-right font-medium">배당</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {accounts.map((a) => {
-            const s = investSummary(positions.filter((p) => p.accountId === a.id))
+            const s = withIncomes(investSummary(positions.filter((p) => p.accountId === a.id)), incomes.filter((i) => i.account_id === a.id))
             const included = isIncluded(a)
             return (
               <tr key={a.id} className={included ? '' : 'text-slate-400'}>
@@ -69,6 +72,7 @@ export default function AccountSummaryCard({ accounts, positions, summary }: Pro
                   {included && summary.value > 0 ? `${Math.round((s.value / summary.value) * 100)}%` : '-'}
                 </td>
                 <td className="py-2 text-right">{included ? <SignedWon value={s.realized} /> : formatWon(s.realized)}</td>
+                <td className="py-2 text-right">{included ? <SignedWon value={s.dividend} /> : formatWon(s.dividend)}</td>
               </tr>
             )
           })}
@@ -84,6 +88,7 @@ export default function AccountSummaryCard({ accounts, positions, summary }: Pro
             <td className="py-2 text-right"><ProfitRate value={summary.unrealized} base={summary.cost} /></td>
             <td className="py-2 text-right text-slate-500">{summary.value > 0 ? '100%' : '-'}</td>
             <td className="py-2 text-right"><SignedWon value={summary.realized} /></td>
+            <td className="py-2 text-right"><SignedWon value={summary.dividend} /></td>
           </tr>
         </tfoot>
       </table>

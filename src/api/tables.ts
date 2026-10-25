@@ -6,6 +6,7 @@ import type {
   Goal,
   InstallmentSaving,
   InvestAccount,
+  InvestIncome,
   LedgerEntry,
   Loan,
   Member,
@@ -27,7 +28,7 @@ export const membersApi = createTableApi<Member>('members', {
 export const goalsApi = createTableApi<Goal>('goals', { order: [{ column: 'year' }] })
 
 export const investAccountsApi = createTableApi<InvestAccount>('invest_accounts', {
-  alsoInvalidate: [['stock_holdings'], ['stock_trades']],
+  alsoInvalidate: [['stock_holdings'], ['stock_trades'], ['invest_incomes']],
 })
 export const stockHoldingsApi = createTableApi<StockHolding>('stock_holdings')
 // 날짜가 없는 기록(엑셀에서 옮긴 것)은 가장 오래된 것으로 보고 맨 앞에
@@ -35,7 +36,11 @@ export const stockTradesApi = createTableApi<StockTrade>('stock_trades', {
   order: [{ column: 'trade_date', ascending: true, nullsFirst: true }, { column: 'created_at' }],
 })
 
-export const bankAccountsApi = createTableApi<BankAccount>('bank_accounts')
+export const investIncomesApi = createTableApi<InvestIncome>('invest_incomes', {
+  order: [{ column: 'income_date' }, { column: 'created_at' }],
+})
+
+export const bankAccountsApi =createTableApi<BankAccount>('bank_accounts')
 export const depositsApi = createTableApi<Deposit>('deposits')
 export const savingsApi = createTableApi<InstallmentSaving>('installment_savings')
 export const loansApi = createTableApi<Loan>('loans')

@@ -2,6 +2,7 @@ import {
   bankAccountsApi,
   depositsApi,
   investAccountsApi,
+  investIncomesApi,
   ledgerApi,
   loansApi,
   realAssetsApi,
@@ -11,7 +12,7 @@ import {
   useStockPrices,
 } from '../api/tables'
 import { calcDeposit, calcLoan, calcSaving, termByMonths } from '../lib/finance'
-import { analyzeInvest, investSummary, isIncluded } from '../lib/invest'
+import { analyzeInvest, investSummary, isIncluded, withIncomes } from '../lib/invest'
 import type { SnapshotAccount, Term } from '../lib/types'
 
 export type AssetItem = { label: string; group: string; amount: number; term: Term; risky: boolean }
@@ -32,6 +33,7 @@ export function useAssetSummary() {
     stockHoldings: stockHoldingsApi.useList(),
     trades: stockTradesApi.useList(),
     prices: useStockPrices(),
+    incomes: investIncomesApi.useList(),
   }
   // 하나라도 덜 받았으면 합계가 작게 나오므로, 월별 기록은 전부 받은 뒤에만 저장한다
   const isLoaded = Object.values(queries).every((q) => q.isSuccess)
@@ -45,6 +47,7 @@ export function useAssetSummary() {
   const stockHoldings = queries.stockHoldings.data ?? []
   const trades = queries.trades.data ?? []
   const prices = queries.prices.data ?? []
+  const incomes = queries.incomes.data ?? []
 
   const items: AssetItem[] = [
     ...accounts.map((a) => ({ label: a.name, group: '계좌', amount: a.balance, term: a.term, risky: false })),
@@ -72,11 +75,16 @@ export function useAssetSummary() {
   if (allInvest.value > 0) items.push({ label: investLabel, group: '투자', amount: allInvest.value, term: 'mid', risky: true })
 
   // 투자 탭 기준 합계('합계 포함' 계좌만)와 계좌별 값
+  // realized 는 매도 실현손익 + 직접 입력한 판매수익·배당금 누계 (월별 추이의 '수익' 계산용)
   const includedIds = new Set(investAccounts.filter(isIncluded).map((a) => a.id))
-  const invest = investSummary(positions.filter((p) => includedIds.has(p.accountId)))
+  const included = withIncomes(
+    investSummary(positions.filter((p) => includedIds.has(p.accountId))),
+    incomes.filter((i) => includedIds.has(i.account_id)),
+  )
+  const invest = { value: included.value, cost: included.cost, realized: included.earned }
   const investByAccount: SnapshotAccount[] = investAccounts.map((a) => {
-    const s = investSummary(positions.filter((p) => p.accountId === a.id))
-    return { id: a.id, name: a.name, included: isIncluded(a), value: s.value, cost: s.cost, realized: s.realized }
+    const s = withIncomes(investSummary(positions.filter((p) => p.accountId === a.id)), incomes.filter((i) => i.account_id === a.id))
+    return { id: a.id, name: a.name, included: isIncluded(a), value: s.value, cost: s.cost, realized: s.earned }
   })
   // 환율을 몰라 미국 종목이 합계에서 빠진 상태 (기록하면 투자금이 줄어든 것처럼 보임)
   const fxMissing = positions.some((p) => p.quantity > 0 && p.fxMissing)

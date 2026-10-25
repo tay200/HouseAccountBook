@@ -314,6 +314,56 @@ export type Database = {
           },
         ]
       }
+      invest_incomes: {
+        Row: {
+          account_id: string
+          amount: number
+          created_at: string
+          id: string
+          income_date: string
+          kind: string
+          market: string
+          memo: string | null
+          stock_code: string | null
+          stock_name: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          created_at?: string
+          id?: string
+          income_date: string
+          kind: string
+          market?: string
+          memo?: string | null
+          stock_code?: string | null
+          stock_name: string
+          user_id?: string
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          income_date?: string
+          kind?: string
+          market?: string
+          memo?: string | null
+          stock_code?: string | null
+          stock_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invest_incomes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "invest_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ledger_entries: {
         Row: {
           amount: number

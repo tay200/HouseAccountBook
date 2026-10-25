@@ -32,12 +32,14 @@ type FormBoxProps = {
   problem: string | null
   saving: boolean
   saveLabel?: string
+  /** 입력칸 배치 (좁은 카드 안에서 열 때 칸 수를 줄인다) */
+  gridClass?: string
   onSave: () => void
   onCancel: () => void
 }
 
 /** 표 위쪽에 열리는 입력 폼 틀 (열리면 화면을 폼으로 옮긴다) */
-export function FormBox({ title, hint, children, preview, problem, saving, saveLabel = '저장', onSave, onCancel }: FormBoxProps) {
+export function FormBox({ title, hint, children, preview, problem, saving, saveLabel = '저장', gridClass = 'grid-cols-2 md:grid-cols-4 xl:grid-cols-6', onSave, onCancel }: FormBoxProps) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -48,7 +50,7 @@ export function FormBox({ title, hint, children, preview, problem, saving, saveL
         <p className="text-sm font-semibold">{title}</p>
         {hint && <span className="text-xs text-slate-500">{hint}</span>}
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">{children}</div>
+      <div className={`grid gap-3 ${gridClass}`}>{children}</div>
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {preview && <span className="mr-auto text-sm text-slate-600 tabular-nums">{preview}</span>}
         {problem && <span className="text-xs text-slate-500">{problem}</span>}

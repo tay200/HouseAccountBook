@@ -98,6 +98,28 @@ export type StockTrade = {
   created_at: string
 }
 
+/** sale = 판매수익(실현 금액만 아는 매도), dividend = 배당금 */
+export type IncomeKind = 'sale' | 'dividend'
+
+/** 직접 입력한 투자 수익 (증권사 앱의 판매수익·배당금을 금액 그대로) */
+export type InvestIncome = {
+  id: string
+  account_id: string
+  kind: IncomeKind
+  income_date: string // 'YYYY-MM-DD'
+  market: Market
+  stock_code: string | null
+  stock_name: string
+  amount: number // 원, 손실은 음수
+  memo: string | null
+  created_at: string
+}
+
+export const INCOME_LABEL: Record<IncomeKind, string> = {
+  sale: '판매수익',
+  dividend: '배당',
+}
+
 export const SIDE_LABEL: Record<TradeSide, string> = {
   buy: '매수',
   sell: '매도',

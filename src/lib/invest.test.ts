@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeInvest, codeProblem, investSummary, normalizeCode, oversellProblem } from './invest'
-import type { StockHolding, StockPrice, StockTrade } from './types'
+import { analyzeInvest, codeProblem, investSummary, normalizeCode, oversellProblem, withIncomes } from './invest'
+import type { InvestIncome, StockHolding, StockPrice, StockTrade } from './types'
 
 // 테스트용 매매 기록을 짧게 만드는 도우미
 let seq = 0
@@ -130,5 +130,16 @@ describe('종목코드', () => {
     expect(codeProblem('KR', '005930')).toBeNull()
     expect(codeProblem('US', normalizeCode('US', 'brk.b'))).toBeNull()
     expect(codeProblem('US', '1234')).not.toBeNull()
+  })
+})
+
+describe('withIncomes', () => {
+  const income = (kind: InvestIncome['kind'], amount: number): InvestIncome => ({
+    id: `${kind}${amount}`, account_id: 'A', kind, income_date: '2026-06-23', market: 'US', stock_code: null, stock_name: 'SGOV', amount, memo: null, created_at: '',
+  })
+  it('판매수익은 실현손익에 더하고 배당은 따로, earned 는 둘 다', () => {
+    const base = { cost: 100, value: 110, unrealized: 10, realized: 5, rate: 0.1 }
+    const s = withIncomes(base, [income('sale', 40_733), income('sale', -1_000), income('dividend', 815)])
+    expect(s).toMatchObject({ realized: 5 + 39_733, dividend: 815, earned: 5 + 39_733 + 815, value: 110 })
   })
 })

@@ -15,6 +15,7 @@ const TABLES: [table: TableName, label: string, orderBy: string][] = [
   ['invest_accounts', '투자 계좌', 'id'],
   ['stock_holdings', '보유 종목 (직접 입력)', 'id'],
   ['stock_trades', '매수·매도 기록', 'id'],
+  ['invest_incomes', '판매수익·배당금 (직접 입력)', 'id'],
   ['stock_prices', '현재가·환율', 'stock_code'],
   ['bank_accounts', '계좌', 'id'],
   ['deposits', '예금', 'id'],
