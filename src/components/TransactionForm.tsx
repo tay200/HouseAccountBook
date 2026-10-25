@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { useSaveTransaction } from '../api/transactions'
+import { useMemoSuggestions, useSaveTransaction, type MemoSuggestion } from '../api/transactions'
 import { useLookups } from '../hooks/useLookups'
-import { formatWon, todayString } from '../lib/format'
+import { formatWon, toDateString, todayString } from '../lib/format'
 import { KIND_LABEL, KINDS_BY_TYPE, type Transaction, type TxKind, type TxType } from '../lib/types'
 import AmountInput from './AmountInput'
 
@@ -13,6 +13,8 @@ type Props = {
   onDone: () => void
   /** 저장이 끝난 뒤 저장된 날짜를 알려준다 (보고 있는 달과 다르면 화면을 그 달로 옮기기 위해) */
   onSaved: (date: string) => void
+  /** 값이 바뀔 때마다 폼으로 스크롤하고 내용 칸에 포커스 (휴대폰 하단 (+) 버튼). 0 이면 아무것도 안 함 */
+  focusRequest?: number
 }
 
 /** 이번 달을 보고 있으면 오늘, 다른 달이면 그 달 1일 */
@@ -21,10 +23,18 @@ function defaultDate(month: string) {
   return today.startsWith(month) ? today : `${month}-01`
 }
 
+/** 오늘에서 days 일 전 'YYYY-MM-DD' */
+function daysAgo(days: number) {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return toDateString(d)
+}
+
 // 부모가 key 를 바꿔주면 이 컴포넌트가 새로 만들어지면서 useState 초기값이 다시 적용된다.
 // (수정할 거래가 바뀔 때 폼 내용을 갈아끼우는 가장 간단한 방법)
-export default function TransactionForm({ month, editing, onDone, onSaved }: Props) {
-  const { categories, majorCategories, paymentMethods, members, categoryById } = useLookups()
+export default function TransactionForm({ month, editing, onDone, onSaved, focusRequest = 0 }: Props) {
+  const { categories, majorCategories, paymentMethods, members, categoryById, categoryLabel } = useLookups()
+  const { data: suggestions } = useMemoSuggestions()
 
   // 수정 모드면 저장된 카테고리에서 대분류/소분류를 거꾸로 찾아낸다
   const editingCategory = editing?.category_id ? categoryById.get(editing.category_id) : undefined
@@ -45,6 +55,7 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
   const save = useSaveTransaction()
   const formRef = useRef<HTMLFormElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
+  const memoRef = useRef<HTMLInputElement>(null)
   // 저장 직후 잠깐 보여줄 '저장됨' 표시
   const [justSaved, setJustSaved] = useState(false)
 
@@ -62,6 +73,13 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
     amountRef.current?.focus({ preventScroll: true })
   }, [editing])
 
+  // 하단 (+) 버튼: 폼으로 화면을 옮기고 내용 칸부터 입력하게 한다
+  useEffect(() => {
+    if (!focusRequest) return
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    memoRef.current?.focus({ preventScroll: true })
+  }, [focusRequest])
+
   useEffect(() => {
     if (!justSaved) return
     const timer = setTimeout(() => setJustSaved(false), 2000)
@@ -78,6 +96,22 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
     setMajorId('') // 수입/지출 카테고리는 서로 다르므로 선택을 초기화
     setSubId('')
     setDiscount(null)
+  }
+
+  /** 내용을 바꿀 때, 예전에 같은 내용으로 입력한 거래가 있으면 그 분류·결제수단을 채운다 (새 거래만) */
+  function changeMemo(next: string) {
+    setMemo(next)
+    const found = editing ? undefined : suggestions?.get(next.trim())
+    if (found) applySuggestion(found)
+  }
+
+  function applySuggestion(s: MemoSuggestion) {
+    if (s.type !== type) changeType(s.type)
+    setKind(s.kind)
+    const c = s.category_id ? categoryById.get(s.category_id) : undefined
+    setMajorId(c ? (c.parent_id ?? c.id) : '')
+    setSubId(c?.parent_id ? c.id : '')
+    setPaymentMethodId(s.payment_method_id ?? '')
   }
 
   function handleSubmit(e: FormEvent) {
@@ -102,12 +136,13 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
           if (editing) {
             onDone()
           } else {
-            // 연달아 입력하기 편하도록 날짜·구분·사람·카테고리·결제수단은 남기고 금액·내용만 비운 뒤 금액 칸으로
+            // 연달아 입력하기 편하도록 날짜·구분·사람·카테고리·결제수단은 남기고 금액·내용만 비운 뒤 내용 칸으로
+            // (내용을 고르면 자동완성이 분류·결제수단을 채워 준다)
             setPayAmount(null)
             setDiscount(null)
             setMemo('')
             setJustSaved(true)
-            amountRef.current?.focus()
+            memoRef.current?.focus()
           }
         },
       },
@@ -134,8 +169,43 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
-        <Field label="날짜">
+        <Field
+          label="날짜"
+          extra={
+            <span className="flex gap-1">
+              {[
+                { label: '오늘', value: daysAgo(0) },
+                { label: '어제', value: daysAgo(1) },
+              ].map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => setDate(chip.value)}
+                  className={`rounded px-1.5 text-xs ${date === chip.value ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </span>
+          }
+        >
           <input type="date" className="input w-full" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </Field>
+        <Field label="내용" wide={type === 'income'}>
+          {/* list 로 연결한 datalist 가 과거 내용을 자동완성 목록으로 보여준다 */}
+          <input
+            ref={memoRef}
+            className="input w-full"
+            list="memo-suggestions"
+            value={memo}
+            onChange={(e) => changeMemo(e.target.value)}
+            placeholder="예: 점심 김밥"
+          />
+          <datalist id="memo-suggestions">
+            {[...(suggestions?.values() ?? [])].map((s) => (
+              <option key={s.memo} value={s.memo!} label={categoryLabel(s.category_id)} />
+            ))}
+          </datalist>
         </Field>
         <Field label="사람">
           <select className="input w-full" value={memberId} onChange={(e) => setMemberId(e.target.value)}>
@@ -184,9 +254,6 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
             <AmountInput className="w-full" value={discount} onChange={setDiscount} />
           </Field>
         )}
-        <Field label="내용" wide={type === 'income'}>
-          <input className="input w-full" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 점심 김밥" />
-        </Field>
       </div>
 
       <div className="flex items-center justify-end gap-3">
@@ -210,10 +277,13 @@ export default function TransactionForm({ month, editing, onDone, onSaved }: Pro
   )
 }
 
-function Field({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
+function Field({ label, children, wide, extra }: { label: string; children: ReactNode; wide?: boolean; extra?: ReactNode }) {
   return (
     <label className={`space-y-1 ${wide ? 'xl:col-span-2' : ''}`}>
-      <span className="text-xs text-slate-500">{label}</span>
+      <span className="flex items-center justify-between text-xs text-slate-500">
+        {label}
+        {extra}
+      </span>
       {children}
     </label>
   )

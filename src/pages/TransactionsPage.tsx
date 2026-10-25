@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Link } from 'react-router'
-import { useDeleteTransaction, useTransactions } from '../api/transactions'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
+import { useDeleteTransaction, useSearchTransactions, useTransactions } from '../api/transactions'
+import type { NewTransactionState } from '../components/Layout'
 import ColorDot from '../components/ColorDot'
 import MonthPicker from '../components/MonthPicker'
 import TransactionForm from '../components/TransactionForm'
@@ -12,9 +13,18 @@ import { KIND_LABEL, type Transaction, type TxKind, type TxType } from '../lib/t
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
-function formatDay(date: string) {
+/** '10/25 (일)'. withYear 면 '2026.10/25 (일)' (모든 달에서 찾을 때) */
+function formatDay(date: string, withYear = false) {
   const d = new Date(`${date}T00:00:00`)
-  return `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAYS[d.getDay()]})`
+  return `${withYear ? `${d.getFullYear()}.` : ''}${d.getMonth() + 1}/${d.getDate()} (${WEEKDAYS[d.getDay()]})`
+}
+
+/** 검색어와 맞는 거래: 내용에 들어 있거나(대소문자 무시), 검색어가 숫자면 금액이 같은 것 */
+function matchesSearch(t: Transaction, term: string) {
+  if (!term) return true
+  if ((t.memo ?? '').toLowerCase().includes(term.toLowerCase())) return true
+  const digits = term.replace(/,/g, '')
+  return /^\d+$/.test(digits) && t.amount === Number(digits)
 }
 
 const KIND_BADGE: Record<TxKind, string> = {
@@ -26,7 +36,7 @@ const KIND_BADGE: Record<TxKind, string> = {
 
 export default function TransactionsPage() {
   const [month, setMonth] = useMonth()
-  const { data: transactions = [], isPending } = useTransactions(month, month)
+  const monthQuery = useTransactions(month, month)
   const { categories, categoriesLoaded, majorCategories, paymentMethods, members, majorOf, categoryLabel, memberName, paymentName } =
     useLookups()
   const deleteTransaction = useDeleteTransaction()
@@ -38,6 +48,33 @@ export default function TransactionsPage() {
   const [paymentFilter, setPaymentFilter] = useState('')
   const [memberFilter, setMemberFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [searchAllMonths, setSearchAllMonths] = useState(false)
+  // 모든 달에서 찾을 때는 글자를 칠 때마다 조회하지 않도록, 입력이 0.3초 멈추면 검색어로 확정한다
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+  const searchingAll = searchAllMonths && debouncedSearch !== ''
+  const searchQuery = useSearchTransactions(searchingAll ? debouncedSearch : '')
+  const { data: transactions = [], isPending } = searchingAll ? searchQuery : monthQuery
+
+  // 휴대폰 하단 (+) 버튼으로 들어오면: 수정 중이던 것을 닫고 새 거래 폼에 포커스
+  const location = useLocation()
+  const navigate = useNavigate()
+  const wantsNew = (location.state as NewTransactionState | null)?.newTransaction === true
+  const [focusRequest, setFocusRequest] = useState(0)
+  const [handledKey, setHandledKey] = useState<string | null>(null)
+  if (wantsNew && handledKey !== location.key) {
+    // 같은 이동(location.key)은 한 번만 처리한다
+    setHandledKey(location.key)
+    setEditing(null)
+    setFocusRequest((n) => n + 1)
+  }
+  useEffect(() => {
+    // 표시를 지워서 새로고침하거나 뒤로 가기 했을 때 다시 포커스되지 않게 한다
+    if (wantsNew) navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
+  }, [wantsNew, location.pathname, location.search, navigate])
 
   const filtered = transactions.filter(
     (t) =>
@@ -46,20 +83,20 @@ export default function TransactionsPage() {
       (!majorFilter || (majorFilter === 'none' ? !t.category_id : majorOf(t.category_id)?.id === majorFilter)) &&
       (!paymentFilter || t.payment_method_id === paymentFilter) &&
       (!memberFilter || (memberFilter === 'shared' ? !t.member_id : t.member_id === memberFilter)) &&
-      (!search || (t.memo ?? '').includes(search)),
+      matchesSearch(t, search.trim()),
   )
   const incomeTotal = sumByType(filtered, 'income')
   const expenseTotal = sumByType(filtered, 'expense')
 
   function handleDelete(t: Transaction) {
-    if (!confirm(`${formatDay(t.date)} ${formatWon(t.amount)} 거래를 삭제할까요?`)) return
+    if (!confirm(`${formatDay(t.date, searchingAll)} ${formatWon(t.amount)} 거래를 삭제할까요?`)) return
     deleteTransaction.mutate(t.id)
     if (editing?.id === t.id) setEditing(null)
   }
 
   return (
     <section className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-2xl font-bold">거래 내역</h2>
         <MonthPicker month={month} onChange={setMonth} />
       </header>
@@ -80,6 +117,7 @@ export default function TransactionsPage() {
         month={month}
         editing={editing}
         onDone={() => setEditing(null)}
+        focusRequest={focusRequest}
         onSaved={(date) => {
           // 다른 달 날짜로 저장했으면 그 달로 이동해서 방금 저장한 거래가 보이게 한다
           if (!date.startsWith(month)) setMonth(date.slice(0, 7))
@@ -127,7 +165,13 @@ export default function TransactionsPage() {
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
-          <input className="input min-w-40 flex-1" placeholder="내용 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="flex min-w-60 flex-1 items-center gap-2">
+            <input className="input min-w-0 flex-1" placeholder="내용 또는 금액 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <label className="flex shrink-0 items-center gap-1 text-sm text-slate-600">
+              <input type="checkbox" checked={searchAllMonths} onChange={(e) => setSearchAllMonths(e.target.checked)} />
+              모든 달
+            </label>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -147,7 +191,7 @@ export default function TransactionsPage() {
             <tbody className="divide-y divide-slate-100">
               {filtered.map((t) => (
                 <tr key={t.id} className={editing?.id === t.id ? 'bg-blue-50' : 'hover:bg-slate-50'}>
-                  <td className="py-2.5 pr-3 whitespace-nowrap text-slate-600">{formatDay(t.date)}</td>
+                  <td className="py-2.5 pr-3 whitespace-nowrap text-slate-600">{formatDay(t.date, searchingAll)}</td>
                   <td className="py-2.5 pr-3">
                     <span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${KIND_BADGE[t.kind]}`}>
                       {t.type === 'income' ? `${KIND_LABEL[t.kind]}수입` : KIND_LABEL[t.kind]}
@@ -179,7 +223,12 @@ export default function TransactionsPage() {
           </table>
         </div>
 
-        {!isPending && filtered.length === 0 && <p className="py-8 text-center text-sm text-slate-400">거래 내역이 없어요.</p>}
+        {searchingAll && <p className="text-xs text-slate-500">모든 달에서 ‘{debouncedSearch}’ 검색 결과예요. 위의 달 선택과 상관없이 보여줘요.</p>}
+        {isPending ? (
+          <p className="py-8 text-center text-sm text-slate-400">불러오는 중…</p>
+        ) : (
+          filtered.length === 0 && <p className="py-8 text-center text-sm text-slate-400">{search ? '찾는 거래가 없어요.' : '거래 내역이 없어요.'}</p>
+        )}
 
         <div className="flex justify-end gap-6 border-t border-slate-200 pt-3 text-sm tabular-nums">
           <span className="text-slate-500">{filtered.length}건</span>

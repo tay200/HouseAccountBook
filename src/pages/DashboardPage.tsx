@@ -1,6 +1,8 @@
+import { Link, useLocation } from 'react-router'
 import { useBudgets } from '../api/budgets'
 import { goalsApi } from '../api/tables'
 import { useTransactions } from '../api/transactions'
+import BudgetBar from '../components/BudgetBar'
 import ColorDot from '../components/ColorDot'
 import MonthlyTrendChart from '../components/MonthlyTrendChart'
 import MonthPicker from '../components/MonthPicker'
@@ -8,8 +10,8 @@ import NoSpendCalendar from '../components/NoSpendCalendar'
 import { StatCard } from '../components/Numbers'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
-import { formatMonthShort, formatWon, shiftMonth } from '../lib/format'
-import { isConsumption, monthSummary, sumExpenseBy, sumGrouped } from '../lib/stats'
+import { currentMonth, formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
+import { budgetUsage, isConsumption, monthSummary, sumExpenseBy, sumGrouped } from '../lib/stats'
 
 const TREND_MONTHS = 6
 
@@ -23,7 +25,7 @@ export default function DashboardPage() {
   const prevMonth = shiftMonth(month, -1)
   // 최근 6개월치를 한 번에 받아서 이번 달 요약, 전월 대비, 추이 차트 모두에 쓴다
   const { data: recent = [], isPending } = useTransactions(firstMonth, month)
-  const { data: budgets = [] } = useBudgets(month)
+  const { data: budgets = [], isSuccess: budgetsLoaded } = useBudgets(month)
   const { data: goals = [] } = goalsApi.useList()
   const { majorOf, memberName, paymentName } = useLookups()
 
@@ -46,6 +48,8 @@ export default function DashboardPage() {
   const thisByMajor = byMajor(thisMonth)
   const lastByMajor = byMajor(lastMonth)
   const budgetByCategory = new Map(budgets.map((b) => [b.category_id, b.amount]))
+  // 남은 예산 카드: 예산 화면과 같은 기준 (예산을 정한 대분류의 소비성 지출)
+  const usage = budgetUsage(budgets, thisByMajor, month, todayString())
   const analysisRows = [...new Set([...thisByMajor.keys(), ...lastByMajor.keys()])]
     .map((id) => {
       const category = majorOf(id || null)
@@ -66,7 +70,7 @@ export default function DashboardPage() {
 
   return (
     <section className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-2xl font-bold">대시보드</h2>
         <MonthPicker month={month} onChange={setMonth} />
       </header>
@@ -76,6 +80,8 @@ export default function DashboardPage() {
         <p className="card py-16 text-center text-sm text-slate-400">불러오는 중…</p>
       ) : (
         <>
+          {budgetsLoaded && <BudgetLeftCard usage={usage} month={month} />}
+
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
             <StatCard label="총 수입" value={formatWon(summary.income)} valueClass="text-blue-600" />
             <StatCard label="총 지출" value={formatWon(summary.expense)} />
@@ -101,7 +107,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm tabular-nums">
-                    <thead className="border-b border-slate-200 text-xs text-slate-500">
+                    <thead className="border-b border-slate-200 text-xs whitespace-nowrap text-slate-500">
                       <tr>
                         <th className="py-2 text-left font-medium">항목</th>
                         <th className="py-2 text-right font-medium">지출</th>
@@ -163,6 +169,45 @@ export default function DashboardPage() {
         </>
       )}
     </section>
+  )
+}
+
+/** 맨 위 카드: 이번 달 남은 예산과 하루에 쓸 수 있는 금액 */
+function BudgetLeftCard({ usage, month }: { usage: ReturnType<typeof budgetUsage>; month: string }) {
+  const { search } = useLocation()
+
+  if (usage.budget === 0) {
+    return (
+      <div className="card flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">예산을 정하면 남은 돈과 하루에 쓸 수 있는 금액을 알려드려요.</p>
+        <Link to={{ pathname: '/budget', search }} className="btn btn-secondary">
+          예산 정하기
+        </Link>
+      </div>
+    )
+  }
+
+  const over = usage.left < 0
+  const isPast = month < currentMonth()
+  const title = usage.daysLeft !== null ? '이번 달 남은 예산' : isPast ? `${formatMonthShort(month)} 예산 결과` : `${formatMonthShort(month)} 예산`
+  return (
+    <div className="card flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p className="text-sm text-slate-500">{title}</p>
+        <p className={`mt-1 text-2xl font-bold tabular-nums ${over ? 'text-red-600' : ''}`}>
+          {over ? `${formatWon(-usage.left)} 초과` : `${formatWon(usage.left)} ${isPast ? '남김' : '남음'}`}
+        </p>
+        {usage.daysLeft !== null && (
+          <p className="mt-1 text-sm text-slate-600">
+            {over ? '예산을 넘었어요' : <>하루 <strong className="tabular-nums">{formatWon(usage.perDay ?? 0)}</strong>씩 쓸 수 있어요</>}
+            <span className="text-slate-400"> · 남은 {usage.daysLeft}일</span>
+          </p>
+        )}
+      </div>
+      <div className="w-full sm:w-80">
+        <BudgetBar spent={usage.spent} budget={usage.budget} />
+      </div>
+    </div>
   )
 }
 

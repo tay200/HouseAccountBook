@@ -60,7 +60,7 @@ export default function ReportPage() {
 
   return (
     <section className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-2xl font-bold">연간 리포트</h2>
         <div className="flex items-center gap-1">
           <button className="btn btn-text" onClick={() => setYear(year - 1)} aria-label="이전 해">◀</button>

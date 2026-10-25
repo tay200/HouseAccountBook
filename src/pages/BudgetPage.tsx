@@ -7,8 +7,8 @@ import ColorDot from '../components/ColorDot'
 import MonthPicker from '../components/MonthPicker'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
-import { formatMonthShort, formatWon, shiftMonth } from '../lib/format'
-import { isConsumption, sumGrouped } from '../lib/stats'
+import { formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
+import { budgetUsage, isConsumption, sumGrouped } from '../lib/stats'
 import type { Budget, Category } from '../lib/types'
 
 export default function BudgetPage() {
@@ -26,13 +26,12 @@ export default function BudgetPage() {
   const budgetByCategory = new Map(budgets.map((b) => [b.category_id, b]))
   const spentByCategory = sumGrouped(transactions, isConsumption, (t) => majorOf(t.category_id)?.id ?? '')
 
-  const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0)
-  // 예산을 정한 카테고리에서 쓴 돈만 합산해야 '예산 대비'가 맞다
-  const totalSpent = budgets.reduce((sum, b) => sum + (spentByCategory.get(b.category_id) ?? 0), 0)
+  // 예산을 정한 카테고리에서 쓴 돈만 합산해야 '예산 대비'가 맞다 (대시보드 '남은 예산'과 같은 계산)
+  const { budget: totalBudget, spent: totalSpent } = budgetUsage(budgets, spentByCategory, month, todayString())
 
   return (
     <section className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-2xl font-bold">예산</h2>
         <MonthPicker month={month} onChange={setMonth} />
       </header>
@@ -59,31 +58,33 @@ export default function BudgetPage() {
 
       <div className="card">
         <p className="mb-2 text-sm text-slate-500">금액을 입력하고 Enter 를 누르거나 다른 곳을 클릭하면 저장돼요. 비우면 예산이 삭제돼요. 사용액에는 소비성 지출만 들어가요 (저축성 지출 제외).</p>
-        <table className="w-full text-sm">
-          <thead className="border-b border-slate-200 text-left text-xs text-slate-500">
-            <tr>
-              <th className="py-2 font-medium">카테고리</th>
-              <th className="w-44 py-2 font-medium">예산</th>
-              <th className="w-32 py-2 text-right font-medium">사용</th>
-              <th className="w-72 py-2 pl-6 font-medium">진행</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {expenseCategories.map((c) => {
-              const budget = budgetByCategory.get(c.id)
-              return (
-                <BudgetRow
-                  // 서버 값이 바뀌면(예: 지난달 복사) 입력칸을 새 값으로 초기화하기 위해 key 에 금액을 포함
-                  key={`${c.id}-${budget?.amount ?? ''}`}
-                  month={month}
-                  category={c}
-                  budget={budget}
-                  spent={spentByCategory.get(c.id) ?? 0}
-                />
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[36rem] text-sm">
+            <thead className="border-b border-slate-200 text-left text-xs whitespace-nowrap text-slate-500">
+              <tr>
+                <th className="py-2 font-medium">카테고리</th>
+                <th className="w-44 py-2 font-medium">예산</th>
+                <th className="w-32 py-2 text-right font-medium">사용</th>
+                <th className="w-72 py-2 pl-6 font-medium">진행</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {expenseCategories.map((c) => {
+                const budget = budgetByCategory.get(c.id)
+                return (
+                  <BudgetRow
+                    // 서버 값이 바뀌면(예: 지난달 복사) 입력칸을 새 값으로 초기화하기 위해 key 에 금액을 포함
+                    key={`${c.id}-${budget?.amount ?? ''}`}
+                    month={month}
+                    category={c}
+                    budget={budget}
+                    spent={spentByCategory.get(c.id) ?? 0}
+                  />
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
         {expenseCategories.length === 0 && (
           <p className="py-8 text-center text-sm text-slate-400">설정에서 지출 카테고리를 먼저 추가해 주세요.</p>
         )}
@@ -110,7 +111,7 @@ function BudgetRow({ month, category, budget, spent }: RowProps) {
 
   return (
     <tr>
-      <td className="py-2">
+      <td className="py-2 pr-3 whitespace-nowrap">
         <span className="inline-flex items-center gap-2">
           <ColorDot color={category.color} />
           {category.name}
