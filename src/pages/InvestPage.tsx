@@ -11,6 +11,7 @@ import { analyzeInvest, investSummary, isIncluded, oversellProblem } from '../li
 import { previousSnapshot } from '../lib/snapshots'
 import { FX_CODE, SIDE_LABEL, type InvestAccount, type Market, type StockHolding, type StockTrade, type TradeSide } from '../lib/types'
 import AccountSummaryCard from './invest/AccountSummaryCard'
+import HoldingsPieCard from './invest/HoldingsPieCard'
 import HoldingsTable from './invest/HoldingsTable'
 import InvestTrendCard from './invest/InvestTrendCard'
 import PriceCell from './invest/PriceCell'
@@ -167,6 +168,8 @@ export default function InvestPage() {
       </div>
 
       <AccountSummaryCard accounts={accounts} positions={positions} summary={summary} />
+
+      <HoldingsPieCard accounts={accounts} positions={positions} />
 
       <InvestTrendCard accounts={accounts} positions={positions} summary={summary} />
 
