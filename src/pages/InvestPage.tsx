@@ -1,16 +1,18 @@
 import { useRef, useState } from 'react'
 import { describeCounts } from '../api/counts'
-import { investAccountsApi, stockHoldingsApi, stockTradesApi, useRefreshStockPrices, useStockPrices } from '../api/tables'
+import { investAccountsApi, monthlySnapshotsApi, stockHoldingsApi, stockTradesApi, useRefreshStockPrices, useStockPrices } from '../api/tables'
 import CrudTable, { type Column } from '../components/CrudTable'
 import HoldingForm from '../components/HoldingForm'
 import { ProfitRate, SignedWon, StatCard } from '../components/Numbers'
 import TradeForm from '../components/TradeForm'
 import { useLookups } from '../hooks/useLookups'
-import { formatNumber, formatWon } from '../lib/format'
+import { currentMonth, formatMonth, formatNumber, formatWon, shiftMonth } from '../lib/format'
 import { analyzeInvest, investSummary, isIncluded, oversellProblem } from '../lib/invest'
+import { previousSnapshot } from '../lib/snapshots'
 import { FX_CODE, SIDE_LABEL, type InvestAccount, type Market, type StockHolding, type StockTrade, type TradeSide } from '../lib/types'
 import AccountSummaryCard from './invest/AccountSummaryCard'
 import HoldingsTable from './invest/HoldingsTable'
+import InvestTrendCard from './invest/InvestTrendCard'
 import PriceCell from './invest/PriceCell'
 import { tradeColumns } from './invest/tradeColumns'
 
@@ -19,6 +21,7 @@ export default function InvestPage() {
   const { data: stockHoldings = [] } = stockHoldingsApi.useList()
   const { data: trades = [] } = stockTradesApi.useList()
   const { data: prices = [] } = useStockPrices()
+  const { data: snapshots = [] } = monthlySnapshotsApi.useList()
   const saveTrade = stockTradesApi.useSave()
   const deleteTrade = stockTradesApi.useDelete()
   const saveHolding = stockHoldingsApi.useSave()
@@ -48,6 +51,7 @@ export default function InvestPage() {
   // 계좌별 현황에서 체크한 계좌만 위쪽 합계에 넣는다 (예: 연금 계좌 제외)
   const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
   const summary = investSummary(positions.filter((p) => includedIds.has(p.accountId)))
+  const prevSnapshot = previousSnapshot(snapshots, currentMonth())
   const lastUpdated = prices.reduce((latest, p) => (p.updated_at > latest ? p.updated_at : latest), '')
 
   /** 매수 기록·보유분을 지웠을 때 뒤의 매도가 가진 수량을 넘게 되면 막는다 */
@@ -138,7 +142,18 @@ export default function InvestPage() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="보유 매수금액" value={formatWon(summary.cost)} />
-        <StatCard label="평가금액" value={formatWon(summary.value)} />
+        <StatCard
+          label="평가금액"
+          value={formatWon(summary.value)}
+          sub={
+            prevSnapshot && (
+              <>
+                {prevSnapshot.month.slice(0, 7) === shiftMonth(currentMonth(), -1) ? '지난달' : formatMonth(prevSnapshot.month.slice(0, 7))} 대비{' '}
+                <SignedWon value={summary.value - prevSnapshot.invest_value} />
+              </>
+            )
+          }
+        />
         <StatCard
           label="평가손익"
           value={
@@ -152,6 +167,8 @@ export default function InvestPage() {
       </div>
 
       <AccountSummaryCard accounts={accounts} positions={positions} summary={summary} />
+
+      <InvestTrendCard accounts={accounts} positions={positions} summary={summary} />
 
       <div className="card">
         <div className="mb-1 flex items-center justify-between">

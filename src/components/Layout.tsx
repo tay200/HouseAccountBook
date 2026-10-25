@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
+import { useMonthlySnapshotSync } from '../hooks/useMonthlySnapshotSync'
 
 const navItems = [
   { to: '/', label: '대시보드' },
@@ -28,6 +29,8 @@ export default function Layout() {
   const { search, pathname } = useLocation()
   const [moreOpen, setMoreOpen] = useState(false)
   const inMore = moreItems.some((item) => item.to === pathname)
+  // 어느 화면을 열든 이번 달 자산 기록을 지금 값으로 맞춘다 (지난달 대비 비교용)
+  useMonthlySnapshotSync()
 
   return (
     <div className="flex min-h-screen">

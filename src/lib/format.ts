@@ -10,6 +10,13 @@ export function formatWon(value: number) {
   return `${numberFormat.format(value)}원`
 }
 
+/** 1234567 → '123만' (차트 축 눈금처럼 짧게). 1만 원 미만은 원 단위로 */
+export function formatManwon(value: number) {
+  if (value === 0) return '0'
+  if (Math.abs(value) < 10000) return formatNumber(value)
+  return `${formatNumber(Math.round(value / 10000))}만`
+}
+
 const usdFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 /** 347.7 → '$347.70' */

@@ -421,6 +421,51 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_snapshots: {
+        Row: {
+          debt: number
+          financial: number
+          id: string
+          invest_accounts: Json
+          invest_cost: number
+          invest_realized: number
+          invest_value: number
+          month: string
+          net_worth: number
+          real_assets: number
+          saved_at: string
+          user_id: string
+        }
+        Insert: {
+          debt: number
+          financial: number
+          id?: string
+          invest_accounts?: Json
+          invest_cost: number
+          invest_realized: number
+          invest_value: number
+          month: string
+          net_worth: number
+          real_assets: number
+          saved_at?: string
+          user_id?: string
+        }
+        Update: {
+          debt?: number
+          financial?: number
+          id?: string
+          invest_accounts?: Json
+          invest_cost?: number
+          invest_realized?: number
+          invest_value?: number
+          month?: string
+          net_worth?: number
+          real_assets?: number
+          saved_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       net_worth_snapshots: {
         Row: {
           amount: number

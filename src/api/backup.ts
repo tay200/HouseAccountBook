@@ -22,6 +22,7 @@ const TABLES: [table: TableName, label: string, orderBy: string][] = [
   ['loans', '대출', 'id'],
   ['real_assets', '부동자산', 'id'],
   ['net_worth_snapshots', '연도별 순자산', 'id'],
+  ['monthly_snapshots', '월별 자산 기록', 'id'],
   ['ledger_entries', '통장 기록', 'id'],
 ]
 

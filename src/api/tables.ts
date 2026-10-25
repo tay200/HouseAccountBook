@@ -9,12 +9,14 @@ import type {
   LedgerEntry,
   Loan,
   Member,
+  MonthlySnapshot,
   NetWorthSnapshot,
   RealAsset,
   StockHolding,
   StockPrice,
   StockTrade,
 } from '../lib/types'
+import type { SnapshotValues } from '../lib/snapshots'
 import { createTableApi } from './createTableApi'
 
 // '목록 + 추가/수정/삭제'만 필요한 테이블들
@@ -44,6 +46,27 @@ export const snapshotsApi = createTableApi<NetWorthSnapshot>('net_worth_snapshot
 export const ledgerApi = createTableApi<LedgerEntry>('ledger_entries', {
   order: [{ column: 'date' }, { column: 'created_at' }],
 })
+
+// ─────────────────────────────────────────────
+// 월별 자산 기록: 앱을 열 때 이번 달 줄을 덮어쓴다 (useMonthlySnapshotSync)
+// ─────────────────────────────────────────────
+export const monthlySnapshotsApi = createTableApi<MonthlySnapshot>('monthly_snapshots', {
+  order: [{ column: 'month' }],
+})
+
+/** 이번 달 기록 저장 (같은 달 기록이 있으면 덮어쓰기: upsert) */
+export function useSaveMonthlySnapshot() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (values: SnapshotValues) => {
+      const { error } = await supabase
+        .from('monthly_snapshots')
+        .upsert({ ...values, saved_at: new Date().toISOString() }, { onConflict: 'user_id,month' })
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: monthlySnapshotsApi.key }),
+  })
+}
 
 // ─────────────────────────────────────────────
 // 현재가: 직접 입력 저장 + Edge Function 으로 자동 조회

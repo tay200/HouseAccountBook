@@ -6,7 +6,8 @@ export const BOM = String.fromCharCode(0xfeff)
 /** 값 하나를 CSV 칸으로: 쉼표·따옴표·줄바꿈이 있으면 따옴표로 감싸고 안의 따옴표는 두 번 쓴다 */
 function cell(value: unknown) {
   if (value === null || value === undefined) return ''
-  const text = String(value)
+  // jsonb 열(월별 자산 기록의 계좌별 값 등)은 JSON 글자로
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 

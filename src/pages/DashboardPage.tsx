@@ -1,19 +1,20 @@
 import { Link, useLocation } from 'react-router'
 import { useBudgets } from '../api/budgets'
-import { goalsApi } from '../api/tables'
+import { goalsApi, monthlySnapshotsApi } from '../api/tables'
 import { useTransactions } from '../api/transactions'
 import BudgetBar from '../components/BudgetBar'
 import ColorDot from '../components/ColorDot'
 import MonthlyTrendChart from '../components/MonthlyTrendChart'
 import MonthPicker from '../components/MonthPicker'
 import NoSpendCalendar from '../components/NoSpendCalendar'
-import { StatCard } from '../components/Numbers'
+import { SignedWon, StatCard } from '../components/Numbers'
+import { useAssetSummary } from '../hooks/useAssetSummary'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
-import { currentMonth, formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
+import { currentMonth, formatMonth, formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
+import { changeRate, previousSnapshot, snapshotOf } from '../lib/snapshots'
 import { budgetUsage, isConsumption, monthSummary, sumExpenseBy, sumGrouped } from '../lib/stats'
-
-const TREND_MONTHS = 6
+import type { MonthlySnapshot } from '../lib/types'
 
 function percent(ratio: number | null) {
   return ratio === null || !Number.isFinite(ratio) ? '-' : `${Math.round(ratio * 100)}%`
@@ -21,10 +22,11 @@ function percent(ratio: number | null) {
 
 export default function DashboardPage() {
   const [month, setMonth] = useMonth()
-  const firstMonth = shiftMonth(month, -(TREND_MONTHS - 1))
+  const year = month.slice(0, 4)
+  const january = `${year}-01`
   const prevMonth = shiftMonth(month, -1)
-  // 최근 6개월치를 한 번에 받아서 이번 달 요약, 전월 대비, 추이 차트 모두에 쓴다
-  const { data: recent = [], isPending } = useTransactions(firstMonth, month)
+  // 작년 12월 ~ 올해 12월을 한 번에 받아서 이번 달 요약, 전월 대비(1월이면 작년 12월), 연간 차트 모두에 쓴다
+  const { data: recent = [], isPending } = useTransactions(shiftMonth(january, -1), `${year}-12`)
   const { data: budgets = [], isSuccess: budgetsLoaded } = useBudgets(month)
   const { data: goals = [] } = goalsApi.useList()
   const { majorOf, memberName, paymentName } = useLookups()
@@ -34,8 +36,8 @@ export default function DashboardPage() {
   const summary = monthSummary(thisMonth)
   const goal = goals.find((g) => g.year === Number(month.slice(0, 4)))
 
-  const trend = Array.from({ length: TREND_MONTHS }, (_, i) => {
-    const m = shiftMonth(firstMonth, i)
+  const trend = Array.from({ length: 12 }, (_, i) => {
+    const m = shiftMonth(january, i)
     const s = monthSummary(recent.filter((t) => t.date.startsWith(m)))
     return { label: formatMonthShort(m), income: s.income, expense: s.expense }
   })
@@ -156,15 +158,17 @@ export default function DashboardPage() {
               <NoSpendCalendar month={month} spentByDate={variableByDate} hasRecords={thisMonth.length > 0} />
             </div>
 
-            <div className="card">
-              <h3 className="mb-4 font-semibold">최근 {TREND_MONTHS}개월 수입·지출</h3>
-              <MonthlyTrendChart data={trend} />
-            </div>
-
             <div className="grid gap-6 sm:grid-cols-2">
               <BreakdownCard title="결제수단별 지출" rows={byPayment.map(([id, amount]) => ({ id, name: paymentName(id || null) || '선택 안 함', amount }))} total={summary.expense} />
               <BreakdownCard title="사람별 지출" rows={byMember.map(([id, amount]) => ({ id, name: memberName(id || null), amount }))} total={summary.expense} />
             </div>
+
+            <AssetChangeCard month={month} />
+          </div>
+
+          <div className="card">
+            <h3 className="mb-4 font-semibold">{year}년 수입·지출</h3>
+            <MonthlyTrendChart data={trend} />
           </div>
         </>
       )}
@@ -208,6 +212,78 @@ function BudgetLeftCard({ usage, month }: { usage: ReturnType<typeof budgetUsage
         <BudgetBar spent={usage.spent} budget={usage.budget} />
       </div>
     </div>
+  )
+}
+
+/**
+ * 순자산과 지난 기록 대비 증감. 이번 달은 지금 값, 지난달은 그 달 기록(마지막으로 앱을 연 시점)으로 보여준다.
+ * 지난달 기록이 없으면 그 전 기록과 비교한다.
+ */
+function AssetChangeCard({ month }: { month: string }) {
+  const { search } = useLocation()
+  const live = useAssetSummary()
+  const { data: snapshots = [], isSuccess } = monthlySnapshotsApi.useList()
+  const isCurrent = month === currentMonth()
+  const saved = snapshotOf(snapshots, month)
+  const prev = previousSnapshot(snapshots, month)
+
+  const cur = isCurrent
+    ? { net: live.net, total: live.total, debt: live.debt, invest: live.invest.value }
+    : saved && { net: saved.net_worth, total: saved.financial + saved.real_assets, debt: saved.debt, invest: saved.invest_value }
+  const prevLabel = prev && (prev.month.slice(0, 7) === shiftMonth(month, -1) ? '지난달' : formatMonth(prev.month.slice(0, 7)))
+  const savedDate = (s: MonthlySnapshot) => new Date(s.saved_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+  const rate = cur && prev ? changeRate(prev.net_worth, cur.net) : null
+
+  return (
+    <div className="card">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="font-semibold">{isCurrent ? '순자산' : `${formatMonthShort(month)} 순자산`}</h3>
+        <Link to={{ pathname: '/assets', search }} className="text-xs text-blue-600 hover:underline">
+          자산 · 부채 보기
+        </Link>
+      </div>
+      {!(isCurrent ? live.isLoaded && isSuccess : isSuccess) ? (
+        <p className="py-6 text-center text-sm text-slate-400">불러오는 중…</p>
+      ) : !cur ? (
+        <p className="py-6 text-center text-sm text-slate-400">이 달에는 자산 기록이 없어요.</p>
+      ) : (
+        <>
+          <p className={`text-2xl font-bold tabular-nums ${cur.net < 0 ? 'text-red-600' : ''}`}>{formatWon(cur.net)}</p>
+          <p className="mt-1 text-sm">
+            {prev ? (
+              <>
+                {prevLabel} 대비 <SignedWon value={cur.net - prev.net_worth} />
+                {rate !== null && <span className="text-slate-500"> ({rate > 0 ? '+' : ''}{(rate * 100).toFixed(1)}%)</span>}
+              </>
+            ) : (
+              <span className="text-slate-500">다음 달부터 지난달 대비 증감이 보여요.</span>
+            )}
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            {isCurrent || !saved ? '오늘 기준' : `${savedDate(saved)} 기록`}
+            {prev && ` · 비교: ${savedDate(prev)} 기록`}
+            {isCurrent && live.fxMissing && ' · 환율을 몰라 미국 종목 제외'}
+          </p>
+          <table className="mt-4 w-full text-sm tabular-nums">
+            <tbody className="divide-y divide-slate-100">
+              <AssetRow label="총자산" value={cur.total} prev={prev && prev.financial + prev.real_assets} />
+              <AssetRow label="부채" value={cur.debt} prev={prev?.debt} />
+              <AssetRow label="투자 평가금액" value={cur.invest} prev={prev?.invest_value} />
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  )
+}
+
+function AssetRow({ label, value, prev }: { label: string; value: number; prev: number | undefined }) {
+  return (
+    <tr className="whitespace-nowrap">
+      <td className="py-2 pr-2 text-slate-600">{label}</td>
+      <td className="py-2 text-right">{formatWon(value)}</td>
+      <td className="py-2 pl-3 text-right text-xs">{prev === undefined ? '' : <SignedWon value={value - prev} />}</td>
+    </tr>
   )
 }
 

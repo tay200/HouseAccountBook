@@ -181,6 +181,32 @@ export type NetWorthSnapshot = {
   memo: string | null
 }
 
+/** 월별 자산 기록의 투자 계좌 1개 값 */
+export type SnapshotAccount = {
+  id: string
+  name: string
+  included: boolean
+  value: number
+  cost: number
+  realized: number
+}
+
+/** 월별 자산 기록: 그 달에 마지막으로 앱을 연 시점의 값 */
+export type MonthlySnapshot = {
+  id: string
+  month: string // 'YYYY-MM-01'
+  financial: number
+  real_assets: number
+  debt: number
+  net_worth: number
+  /** 투자 합계는 '합계 포함' 계좌만 */
+  invest_value: number
+  invest_cost: number
+  invest_realized: number
+  invest_accounts: SnapshotAccount[]
+  saved_at: string
+}
+
 export type LedgerEntry = {
   id: string
   book: string
