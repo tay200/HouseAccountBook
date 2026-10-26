@@ -13,7 +13,7 @@ export default function CategorySettings() {
         <h3 className="font-semibold">카테고리</h3>
         <p className="text-xs text-slate-500">대분류 아래에 소분류를 둘 수 있어요. 예산과 분석은 대분류 기준으로 합산돼요.</p>
       </div>
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {(['expense', 'income'] as const).map((type) => (
           <CategoryColumn key={type} type={type} categories={categories.filter((c) => c.type === type)} />
         ))}
@@ -85,9 +85,9 @@ function CategoryRow({ category, subIds = [] }: { category: Category; subIds?: s
   }
 
   return (
-    <div className="flex flex-1 items-center gap-2 py-1">
+    <div className="flex min-w-0 flex-1 items-center gap-2 py-1">
       {isMajor && <input type="color" className="h-7 w-7 cursor-pointer rounded" value={color} onChange={(e) => setColor(e.target.value)} />}
-      <input className="input flex-1 py-1" value={name} onChange={(e) => setName(e.target.value)} />
+      <input className="input min-w-0 flex-1 py-1" value={name} onChange={(e) => setName(e.target.value)} />
       {changed && (
         <button
           className="btn btn-primary py-1"
@@ -114,7 +114,7 @@ function AddCategoryForm({ type, parentId, placeholder }: { type: TxType; parent
 
   return (
     <form onSubmit={handleAdd} className="flex gap-2">
-      <input className="input flex-1 py-1.5" placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} />
+      <input className="input min-w-0 flex-1 py-1.5" placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} />
       <button className="btn btn-secondary py-1.5" disabled={!name.trim() || save.isPending}>추가</button>
     </form>
   )

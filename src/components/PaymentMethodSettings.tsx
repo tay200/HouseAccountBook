@@ -36,7 +36,7 @@ export default function PaymentMethodSettings() {
       </ul>
       <form onSubmit={handleAdd} className="flex gap-2">
         <KindSelect value={kind} onChange={setKind} />
-        <input className="input flex-1" placeholder="예: 신한카드, 국민은행 월급통장" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="input min-w-0 flex-1" placeholder="예: 신한카드, 국민은행 월급통장" value={name} onChange={(e) => setName(e.target.value)} />
         <button className="btn btn-secondary" disabled={!name.trim() || save.isPending}>추가</button>
       </form>
     </div>
@@ -58,7 +58,7 @@ function PaymentMethodRow({ paymentMethod }: { paymentMethod: PaymentMethod }) {
   return (
     <li className="flex items-center gap-2 py-1.5">
       <KindSelect value={kind} onChange={setKind} />
-      <input className="input flex-1 py-1.5" value={name} onChange={(e) => setName(e.target.value)} />
+      <input className="input min-w-0 flex-1 py-1.5" value={name} onChange={(e) => setName(e.target.value)} />
       {changed && (
         <button
           className="btn btn-primary py-1.5"

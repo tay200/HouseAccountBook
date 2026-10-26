@@ -53,6 +53,8 @@ export default function HoldingsTable({ positions, priceByCode, accountName, edi
 
   return (
     <>
+      {/* 좁은 화면에서는 표만 가로로 스크롤 (화면 전체가 넘치지 않게) */}
+      <div className="overflow-x-auto">
       <table className="w-full text-sm tabular-nums">
         <thead className="border-b border-slate-200 text-xs text-slate-500">
           <tr>
@@ -94,12 +96,14 @@ export default function HoldingsTable({ positions, priceByCode, accountName, edi
           })}
         </tbody>
       </table>
+      </div>
       {open.length === 0 && <p className="py-6 text-center text-sm text-slate-400">보유 종목이 없어요.</p>}
       {closed.length > 0 && (
         // 다 판 종목: 실현손익을 보고, 직접 넣었던 보유분이 있으면 여기서 고치거나 지울 수 있다
         <details className="mt-4 rounded-lg border border-slate-200 px-4 py-2">
           <summary className="cursor-pointer text-sm text-slate-600">청산 종목 {closed.length}개 (다 판 종목)</summary>
-          <table className="mt-2 w-full text-sm tabular-nums">
+          <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-sm tabular-nums">
             <tbody className="divide-y divide-slate-100">
               {closed.map((p) => (
                 <tr key={p.key}>
@@ -111,6 +115,7 @@ export default function HoldingsTable({ positions, priceByCode, accountName, edi
               ))}
             </tbody>
           </table>
+          </div>
         </details>
       )}
     </>

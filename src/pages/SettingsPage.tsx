@@ -27,7 +27,7 @@ export default function SettingsPage() {
     <section className="space-y-6">
       <h2 className="text-2xl font-bold">설정</h2>
       <CategorySettings />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <PaymentMethodSettings />
         <MemberSettings />
       </div>

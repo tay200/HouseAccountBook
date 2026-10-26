@@ -30,6 +30,7 @@ export default function AccountSummaryCard({ accounts, positions, incomes, summa
     <div className="card">
       <h3 className="mb-1 font-semibold">계좌별 현황</h3>
       <p className="mb-4 text-xs text-slate-500">체크한 계좌만 위쪽 합계에 들어가요. 연금처럼 따로 보고 싶은 계좌는 체크를 풀어 두세요.</p>
+      <div className="overflow-x-auto">
       <table className="w-full text-sm tabular-nums">
         <thead className="border-b border-slate-200 text-xs text-slate-500">
           <tr>
@@ -92,6 +93,7 @@ export default function AccountSummaryCard({ accounts, positions, incomes, summa
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
   )
 }
