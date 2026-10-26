@@ -53,7 +53,11 @@ export function useDeleteTransaction() {
       const { error } = await supabase.from('transactions').delete().eq('id', id)
       if (error) throw error
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      // 경조사 기록과 연결된 거래였으면 연결이 비워진다
+      queryClient.invalidateQueries({ queryKey: ['gift_events'] })
+    },
   })
 }
 

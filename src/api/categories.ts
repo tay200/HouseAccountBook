@@ -47,6 +47,7 @@ export function useDeleteCategory() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
       queryClient.invalidateQueries({ queryKey: ['recurring_rules'] })
+      queryClient.invalidateQueries({ queryKey: ['favorite_transactions'] })
     },
   })
 }

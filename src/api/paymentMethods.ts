@@ -42,6 +42,9 @@ export function useDeletePaymentMethod() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: KEY })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      // 이 결제수단을 쓰던 반복 거래·즐겨찾기도 결제수단이 비워진다
+      queryClient.invalidateQueries({ queryKey: ['recurring_rules'] })
+      queryClient.invalidateQueries({ queryKey: ['favorite_transactions'] })
     },
   })
 }

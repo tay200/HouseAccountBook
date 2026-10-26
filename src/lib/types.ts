@@ -61,6 +61,51 @@ export type RecurringRule = {
   active: boolean
 }
 
+/** 자주 쓰는 거래. 누르면 입력 폼을 채운다 (amount 가 없으면 금액만 입력) */
+export type FavoriteTransaction = {
+  id: string
+  name: string
+  type: TxType
+  kind: TxKind
+  amount: number | null
+  category_id: string | null
+  payment_method_id: string | null
+  member_id: string | null
+  memo: string | null
+  tags: string[]
+}
+
+export type GiftEventType = 'wedding' | 'funeral' | 'first_birthday' | 'birthday' | 'etc'
+export type GiftDirection = 'give' | 'receive'
+
+/** 경조사비 장부 한 줄 */
+export type GiftEvent = {
+  id: string
+  date: string // 'YYYY-MM-DD'
+  counterpart: string // 상대방
+  relation: string | null // 관계 (친구, 직장 …)
+  event_type: GiftEventType
+  direction: GiftDirection
+  amount: number
+  member_id: string | null // 우리 쪽 누구와 관련된 일인지 (null = 공동)
+  /** 보낼 때 '가계부 지출로도 기록'으로 함께 만든 거래 */
+  transaction_id: string | null
+  memo: string | null
+}
+
+export const GIFT_EVENT_LABEL: Record<GiftEventType, string> = {
+  wedding: '결혼',
+  funeral: '장례',
+  first_birthday: '돌잔치',
+  birthday: '생일',
+  etc: '기타',
+}
+
+export const GIFT_DIRECTION_LABEL: Record<GiftDirection, string> = {
+  give: '보냄',
+  receive: '받음',
+}
+
 /** sinking = 쓸 돈 모으기 (명절·자동차세), goal = 목표 모으기 (전세·차) */
 export type SavingGoalKind = 'sinking' | 'goal'
 /** 모은 돈을 어디서 읽을지: 직접 입력 / 통장 기록의 통장 잔액 / 자산의 계좌 잔액 */

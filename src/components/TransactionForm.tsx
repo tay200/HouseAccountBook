@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { favoritesApi } from '../api/tables'
 import { useMemoSuggestions, useSaveTransaction, useTagSuggestions, type MemoSuggestion } from '../api/transactions'
 import { useLookups } from '../hooks/useLookups'
 import { formatTags, formatWon, parseTags, toDateString, todayString } from '../lib/format'
-import { KIND_LABEL, KINDS_BY_TYPE, type Transaction, type TxKind, type TxType } from '../lib/types'
+import { KIND_LABEL, KINDS_BY_TYPE, type FavoriteTransaction, type Transaction, type TxKind, type TxType } from '../lib/types'
 import AmountInput from './AmountInput'
 
 type Props = {
@@ -36,6 +37,9 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
   const { categories, majorCategories, paymentMethods, members, categoryById, categoryLabel } = useLookups()
   const { data: suggestions } = useMemoSuggestions()
   const { data: tagSuggestions = [] } = useTagSuggestions()
+  const { data: favorites = [] } = favoritesApi.useList()
+  const saveFavorite = favoritesApi.useSave()
+  const removeFavorite = favoritesApi.useDelete()
 
   // 수정 모드면 저장된 카테고리에서 대분류/소분류를 거꾸로 찾아낸다
   const editingCategory = editing?.category_id ? categoryById.get(editing.category_id) : undefined
@@ -120,6 +124,40 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
     setPaymentMethodId(s.payment_method_id ?? '')
   }
 
+  /** 즐겨찾기를 누르면 폼을 채우고 금액 칸으로 (저장은 [추가]를 눌러야 한다) */
+  function applyFavorite(f: FavoriteTransaction) {
+    if (f.type !== type) changeType(f.type)
+    setKind(f.kind)
+    const c = f.category_id ? categoryById.get(f.category_id) : undefined
+    setMajorId(c ? (c.parent_id ?? c.id) : '')
+    setSubId(c?.parent_id ? c.id : '')
+    setPaymentMethodId(f.payment_method_id ?? '')
+    setMemberId(f.member_id ?? '')
+    setMemo(f.memo ?? '')
+    setTagsText(formatTags(f.tags))
+    setPayAmount(f.amount)
+    setDiscount(null)
+    amountRef.current?.focus()
+  }
+
+  /** 지금 폼 내용(날짜 제외)을 즐겨찾기로. 금액을 비워 두면 금액 없이 저장된다 */
+  function saveAsFavorite() {
+    const categoryId = subId || majorId || null
+    const name = prompt('즐겨찾기 이름 (칩에 보여요)', memo.trim() || (categoryId ? categoryLabel(categoryId) : ''))?.trim()
+    if (!name) return
+    saveFavorite.mutate({
+      name,
+      type,
+      kind,
+      amount: netAmount > 0 ? netAmount : null,
+      category_id: categoryId,
+      payment_method_id: paymentMethodId || null,
+      member_id: memberId || null,
+      memo: memo.trim() || null,
+      tags,
+    })
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (netAmount <= 0) return
@@ -174,6 +212,32 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
           />
         </div>
       </div>
+
+      {!editing && favorites.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-slate-500">즐겨찾기</span>
+          {favorites.map((f) => (
+            <span key={f.id} className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-sm text-amber-900">
+              <button
+                type="button"
+                className="rounded-l-full py-0.5 pr-1 pl-2.5 hover:bg-amber-100"
+                title={f.amount ? formatWon(f.amount) : '금액은 직접 입력'}
+                onClick={() => applyFavorite(f)}
+              >
+                ⭐ {f.name}
+              </button>
+              <button
+                type="button"
+                className="rounded-r-full px-1.5 py-0.5 text-amber-700/60 hover:bg-amber-100 hover:text-amber-900"
+                aria-label={`${f.name} 즐겨찾기 삭제`}
+                onClick={() => confirm(`'${f.name}' 즐겨찾기를 삭제할까요?`) && removeFavorite.mutate(f.id)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
         <Field
@@ -292,6 +356,17 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
         )}
         {payAmount !== null && netAmount <= 0 && (
           <span className="text-xs text-red-600">{(discount ?? 0) > 0 ? '할인이 결제금액보다 크거나 같아요' : '금액을 넣어 주세요'}</span>
+        )}
+        {!editing && (
+          <button
+            type="button"
+            className="btn btn-text mr-auto text-sm"
+            title="지금 입력한 내용으로 즐겨찾기를 만들어요. 금액을 비워 두면 금액은 매번 입력해요."
+            disabled={(!memo.trim() && !majorId) || saveFavorite.isPending}
+            onClick={saveAsFavorite}
+          >
+            ☆ 즐겨찾기로 저장
+          </button>
         )}
         {editing && (
           <button type="button" className="btn btn-secondary" onClick={onDone}>

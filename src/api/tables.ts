@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type {
   BankAccount,
+  FavoriteTransaction,
+  GiftEvent,
   Deposit,
   Goal,
   InstallmentSaving,
@@ -25,7 +27,7 @@ import { createTableApi } from './createTableApi'
 // '목록 + 추가/수정/삭제'만 필요한 테이블들
 // 사람을 지우면 이 테이블들의 member_id 가 비워지므로 함께 새로고침
 export const membersApi = createTableApi<Member>('members', {
-  alsoInvalidate: [['transactions'], ['ledger_entries'], ['bank_accounts'], ['deposits'], ['installment_savings'], ['invest_accounts'], ['recurring_rules']],
+  alsoInvalidate: [['transactions'], ['ledger_entries'], ['bank_accounts'], ['deposits'], ['installment_savings'], ['invest_accounts'], ['recurring_rules'], ['favorite_transactions'], ['gift_events']],
 })
 export const goalsApi = createTableApi<Goal>('goals', { order: [{ column: 'year' }] })
 
@@ -59,6 +61,14 @@ export const ledgerApi = createTableApi<LedgerEntry>('ledger_entries', {
 export const recurringRulesApi = createTableApi<RecurringRule>('recurring_rules', {
   order: [{ column: 'day' }, { column: 'created_at' }],
   alsoInvalidate: [['transactions']],
+})
+
+// 즐겨찾기 거래 (누르면 입력 폼을 채움)
+export const favoritesApi = createTableApi<FavoriteTransaction>('favorite_transactions')
+
+// 경조사비 장부 (저장·삭제는 가계부 거래와 함께 처리하는 api/gifts.ts 사용)
+export const giftEventsApi = createTableApi<GiftEvent>('gift_events', {
+  order: [{ column: 'date', ascending: false }, { column: 'created_at', ascending: false }],
 })
 
 // 모으기 목표 (특별비 적립 + 저축 목표)

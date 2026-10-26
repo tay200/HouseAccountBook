@@ -199,6 +199,96 @@ export type Database = {
           },
         ]
       }
+      favorite_transactions: {
+        Row: {
+          amount: number | null
+          category_id: string | null
+          created_at: string
+          id: string
+          kind: string
+          member_id: string | null
+          memo: string | null
+          name: string
+          payment_method_id: string | null
+          tags: string[]
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          member_id?: string | null
+          memo?: string | null
+          name: string
+          payment_method_id?: string | null
+          tags?: string[]
+          type: string
+          user_id?: string
+        }
+        Update: {
+          amount?: number | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          member_id?: string | null
+          memo?: string | null
+          name?: string
+          payment_method_id?: string | null
+          tags?: string[]
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      gift_events: {
+        Row: {
+          amount: number
+          counterpart: string
+          created_at: string
+          date: string
+          direction: string
+          event_type: string
+          id: string
+          member_id: string | null
+          memo: string | null
+          relation: string | null
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          counterpart: string
+          created_at?: string
+          date: string
+          direction: string
+          event_type?: string
+          id?: string
+          member_id?: string | null
+          memo?: string | null
+          relation?: string | null
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Update: {
+          amount?: number
+          counterpart?: string
+          created_at?: string
+          date?: string
+          direction?: string
+          event_type?: string
+          id?: string
+          member_id?: string | null
+          memo?: string | null
+          relation?: string | null
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       goals: {
         Row: {
           id: string

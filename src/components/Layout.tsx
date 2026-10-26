@@ -10,6 +10,7 @@ const navItems = [
   { to: '/invest', label: '투자' },
   { to: '/assets', label: '자산 · 부채' },
   { to: '/ledger', label: '통장 기록' },
+  { to: '/gifts', label: '경조사' },
   { to: '/settings', label: '설정' },
 ]
 

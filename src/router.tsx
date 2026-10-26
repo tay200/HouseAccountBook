@@ -21,6 +21,7 @@ export const router = createHashRouter([
       { path: 'invest', lazy: page(() => import('./pages/InvestPage.tsx')) },
       { path: 'assets', lazy: page(() => import('./pages/AssetsPage.tsx')) },
       { path: 'ledger', lazy: page(() => import('./pages/LedgerPage.tsx')) },
+      { path: 'gifts', lazy: page(() => import('./pages/GiftsPage.tsx')) },
       { path: 'settings', lazy: page(() => import('./pages/SettingsPage.tsx')) },
     ],
   },
