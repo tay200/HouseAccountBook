@@ -237,7 +237,13 @@ function BudgetLeftCard({ usage, forecast, month }: { usage: ReturnType<typeof b
         </p>
         {usage.daysLeft !== null && (
           <p className="mt-1 text-sm text-slate-600">
-            {over ? '예산을 넘었어요' : <>하루 <strong className="tabular-nums">{formatWon(usage.perDay ?? 0)}</strong>씩 쓸 수 있어요</>}
+            {over ? (
+              '예산을 넘었어요'
+            ) : usage.perDay === 0 ? (
+              '나갈 고정 지출을 빼면 더 쓸 돈이 없어요'
+            ) : (
+              <>하루 <strong className="tabular-nums">{formatWon(usage.perDay ?? 0)}</strong>씩 쓸 수 있어요</>
+            )}
             <span className="text-slate-400">
               {' '}
               · 남은 {usage.daysLeft}일{usage.pending > 0 && ` · 나갈 고정 지출 ${formatWon(usage.pending)} 미리 뺌`}
