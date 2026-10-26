@@ -75,7 +75,8 @@ export default function GiftsPage() {
     <section className="space-y-6">
       <h2 className="text-2xl font-bold">경조사</h2>
 
-      <div className="grid grid-cols-3 gap-4">
+      {/* 휴대폰: 한 줄에 하나씩 (이름 왼쪽, 금액 오른쪽), 넓은 화면: 3칸 */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <Stat label="보낸 돈" value={given} className="text-red-600" />
         <Stat label="받은 돈" value={received} className="text-blue-600" />
         <Stat label="받은 돈 − 보낸 돈" value={received - given} className={received - given < 0 ? 'text-red-600' : ''} />
@@ -165,9 +166,9 @@ export default function GiftsPage() {
 
 function Stat({ label, value, className = '' }: { label: string; value: number; className?: string }) {
   return (
-    <div className="card">
+    <div className="card flex items-baseline justify-between gap-2 py-3 sm:block sm:py-5">
       <p className="text-sm text-slate-500">{label}</p>
-      <p className={`mt-1 text-lg font-bold tabular-nums sm:text-xl ${className}`}>{formatWon(value)}</p>
+      <p className={`text-lg font-bold whitespace-nowrap tabular-nums sm:mt-1 sm:text-xl ${className}`}>{formatWon(value)}</p>
     </div>
   )
 }
