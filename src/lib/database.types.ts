@@ -242,7 +242,29 @@ export type Database = {
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "favorite_transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "favorite_transactions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "favorite_transactions_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gift_events: {
         Row: {
@@ -287,7 +309,22 @@ export type Database = {
           transaction_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "gift_events_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gift_events_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       goals: {
         Row: {
@@ -972,71 +1009,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "stock_trades_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "invest_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      trades: {
-        Row: {
-          account_id: string
-          buy_date: string | null
-          buy_fx_rate: number | null
-          buy_price: number
-          created_at: string
-          fee: number
-          id: string
-          market: string
-          memo: string | null
-          quantity: number
-          sell_date: string | null
-          sell_fx_rate: number | null
-          sell_price: number | null
-          stock_code: string
-          stock_name: string
-          user_id: string
-        }
-        Insert: {
-          account_id: string
-          buy_date?: string | null
-          buy_fx_rate?: number | null
-          buy_price: number
-          created_at?: string
-          fee?: number
-          id?: string
-          market?: string
-          memo?: string | null
-          quantity: number
-          sell_date?: string | null
-          sell_fx_rate?: number | null
-          sell_price?: number | null
-          stock_code: string
-          stock_name: string
-          user_id?: string
-        }
-        Update: {
-          account_id?: string
-          buy_date?: string | null
-          buy_fx_rate?: number | null
-          buy_price?: number
-          created_at?: string
-          fee?: number
-          id?: string
-          market?: string
-          memo?: string | null
-          quantity?: number
-          sell_date?: string | null
-          sell_fx_rate?: number | null
-          sell_price?: number | null
-          stock_code?: string
-          stock_name?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "trades_account_id_fkey"
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "invest_accounts"
