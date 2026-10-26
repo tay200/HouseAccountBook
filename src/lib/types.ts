@@ -150,6 +150,32 @@ export type Goal = {
   year: number
   monthly_saving_target: number
   saving_rate_target: number // 퍼센트
+  /** 월 무지출 목표 일수 (0 = 목표 없음) */
+  no_spend_target: number
+}
+
+/** 가계부 설정 (가계부마다 1줄. 아직 저장한 적 없으면 기본값) */
+export type AppSettings = {
+  /** 이 금액 이상인 변동지출을 큰 지출로 강조 */
+  big_spend_threshold: number
+}
+
+export const DEFAULT_APP_SETTINGS: AppSettings = { big_spend_threshold: 100000 }
+
+/**
+ * 잔액 맞추기 기록.
+ * book    : 통장 기록의 통장 잔액을 date 기준으로 실제 잔액과 비교
+ * payment : 결제수단의 한 달(date = 그 달 1일) 사용액을 카드사 금액과 비교
+ */
+export type Reconciliation = {
+  id: string
+  target: 'book' | 'payment'
+  book: string | null
+  payment_method_id: string | null
+  date: string
+  actual: number
+  recorded: number
+  memo: string | null
 }
 
 export type InvestAccount = {

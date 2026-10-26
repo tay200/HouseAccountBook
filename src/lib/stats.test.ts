@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { toCsv } from './csv'
 import { parseTags, shiftMonth } from './format'
-import { budgetCarry, budgetUsage, consumptionByMonth, forecastMonthEnd, monthSummary } from './stats'
+import { budgetCarry, budgetUsage, consumptionByMonth, forecastMonthEnd, isBigSpend, monthSummary, noSpendStats } from './stats'
 import type { Transaction } from './types'
 
 const tx = (fields: Partial<Transaction>): Transaction => ({
@@ -119,5 +119,29 @@ describe('parseTags', () => {
   it('공백·쉼표로 나누고 # 을 떼고 중복을 없앤다', () => {
     expect(parseTags('#제주여행  #가족, 이사 #제주여행')).toEqual(['제주여행', '가족', '이사'])
     expect(parseTags('   ')).toEqual([])
+  })
+})
+
+describe('isBigSpend', () => {
+  it('기준 금액 이상인 변동지출만', () => {
+    expect(isBigSpend(tx({ amount: 100_000 }), 100_000)).toBe(true)
+    expect(isBigSpend(tx({ amount: 99_999 }), 100_000)).toBe(false)
+    expect(isBigSpend(tx({ amount: 500_000, kind: 'fixed' }), 100_000)).toBe(false)
+    expect(isBigSpend(tx({ amount: 500_000, type: 'income', kind: 'extra' }), 100_000)).toBe(false)
+  })
+})
+
+describe('noSpendStats', () => {
+  // 10월: 3일·7일에 지출, 오늘은 10일 → 1~9일 중 무지출 7일, 최장 연속 3일(4~6일), 지금 연속 2일(8~9일)
+  const spent = new Map([['2026-10-03', 5000], ['2026-10-07', 12000]])
+  it('이번 달: 어제까지 센다', () => {
+    expect(noSpendStats('2026-10', spent, '2026-10-10', true)).toEqual({ days: 7, current: 2, best: 3 })
+  })
+  it('지난달: 말일까지 센다', () => {
+    // 9월 전체 무지출 30일
+    expect(noSpendStats('2026-09', new Map(), '2026-10-10', true)).toEqual({ days: 30, current: 30, best: 30 })
+  })
+  it('기록이 없는 달은 0', () => {
+    expect(noSpendStats('2026-09', new Map(), '2026-10-10', false)).toEqual({ days: 0, current: 0, best: 0 })
   })
 })

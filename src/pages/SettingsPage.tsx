@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { downloadBackup } from '../api/backup'
 import { useSession } from '../auth/session'
+import BigSpendSettings from '../components/BigSpendSettings'
 import CategorySettings from '../components/CategorySettings'
 import MemberSettings from '../components/MemberSettings'
 import PaymentMethodSettings from '../components/PaymentMethodSettings'
@@ -32,6 +33,7 @@ export default function SettingsPage() {
         <MemberSettings />
       </div>
       <RecurringSettings />
+      <BigSpendSettings />
       <div className="card flex items-center justify-between gap-4">
         <div>
           <h3 className="font-semibold">데이터 백업</h3>

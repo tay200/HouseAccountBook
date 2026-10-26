@@ -16,6 +16,8 @@ const TABLES: [table: TableName, label: string, orderBy: string][] = [
   ['saving_goals', '모으기 목표', 'id'],
   ['favorite_transactions', '즐겨찾기 거래', 'id'],
   ['gift_events', '경조사', 'id'],
+  ['reconciliations', '잔액 맞추기 기록', 'id'],
+  ['app_settings', '가계부 설정', 'user_id'],
   ['invest_accounts', '투자 계좌', 'id'],
   ['stock_holdings', '보유 종목 (직접 입력)', 'id'],
   ['stock_trades', '매수·매도 기록', 'id'],

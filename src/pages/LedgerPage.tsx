@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ledgerApi } from '../api/tables'
+import BookCheck from '../components/BookCheck'
 import CrudTable, { type Column } from '../components/CrudTable'
 import { useLookups } from '../hooks/useLookups'
 import { formatWon, todayString } from '../lib/format'
@@ -83,6 +84,9 @@ export default function LedgerPage() {
         <Stat label="출금 합계" value={totalOut} />
         <Stat label="현재 잔액" value={running} />
       </div>
+
+      {/* 통장을 바꾸면 입력 중이던 값을 비우기 위해 key 로 다시 만든다 */}
+      <BookCheck key={book} book={book} entries={rows} />
 
       <div className="card">
         <CrudTable

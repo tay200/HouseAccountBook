@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          big_spend_threshold: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          big_spend_threshold?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          big_spend_threshold?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       bank_accounts: {
         Row: {
           account_number: string | null
@@ -330,6 +348,7 @@ export type Database = {
         Row: {
           id: string
           monthly_saving_target: number
+          no_spend_target: number
           saving_rate_target: number
           user_id: string
           year: number
@@ -337,6 +356,7 @@ export type Database = {
         Insert: {
           id?: string
           monthly_saving_target?: number
+          no_spend_target?: number
           saving_rate_target?: number
           user_id?: string
           year: number
@@ -344,6 +364,7 @@ export type Database = {
         Update: {
           id?: string
           monthly_saving_target?: number
+          no_spend_target?: number
           saving_rate_target?: number
           user_id?: string
           year?: number
@@ -717,6 +738,45 @@ export type Database = {
           id?: string
           memo?: string | null
           name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reconciliations: {
+        Row: {
+          actual: number
+          book: string | null
+          created_at: string
+          date: string
+          id: string
+          memo: string | null
+          payment_method_id: string | null
+          recorded: number
+          target: string
+          user_id: string
+        }
+        Insert: {
+          actual: number
+          book?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          memo?: string | null
+          payment_method_id?: string | null
+          recorded: number
+          target: string
+          user_id?: string
+        }
+        Update: {
+          actual?: number
+          book?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          memo?: string | null
+          payment_method_id?: string | null
+          recorded?: number
+          target?: string
           user_id?: string
         }
         Relationships: []

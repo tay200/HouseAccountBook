@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { goalsApi } from '../api/tables'
 import { useTransactions } from '../api/transactions'
 import AmountInput from '../components/AmountInput'
+import CashFlowSankey from '../components/CashFlowSankey'
 import MonthlyTrendChart from '../components/MonthlyTrendChart'
 import PivotTable from '../components/PivotTable'
 import TagTable from '../components/TagTable'
@@ -128,6 +129,12 @@ export default function ReportPage() {
         <MonthlyTrendChart data={monthly.map((s, i) => ({ label: `${i + 1}월`, income: s.income, expense: s.expense }))} />
       </div>
 
+      <div className="card">
+        <h3 className="mb-1 font-semibold">{year}년 돈의 흐름</h3>
+        <p className="mb-3 text-xs text-slate-500">한 해 동안 들어온 돈이 저축·소비·남은 돈으로 어떻게 나뉘었는지 보여줘요.</p>
+        <CashFlowSankey transactions={transactions} majorOf={(id) => majorOf(id)} height={360} />
+      </div>
+
       <div className="card space-y-4">
         <div className="flex flex-wrap gap-1 border-b border-slate-200">
           {TABS.map((t) => (
@@ -151,7 +158,12 @@ function GoalCard({ year, goal }: { year: number; goal: Goal | undefined }) {
   const save = goalsApi.useSave()
   const [target, setTarget] = useState<number | null>(goal?.monthly_saving_target || null)
   const [rate, setRate] = useState(goal?.saving_rate_target ? String(goal.saving_rate_target) : '')
-  const changed = (target ?? 0) !== (goal?.monthly_saving_target ?? 0) || Number(rate || 0) !== (goal?.saving_rate_target ?? 0)
+  const [noSpend, setNoSpend] = useState(goal?.no_spend_target ? String(goal.no_spend_target) : '')
+  const changed =
+    (target ?? 0) !== (goal?.monthly_saving_target ?? 0) ||
+    Number(rate || 0) !== (goal?.saving_rate_target ?? 0) ||
+    Number(noSpend || 0) !== (goal?.no_spend_target ?? 0)
+  const noSpendValid = Number.isInteger(Number(noSpend || 0)) && Number(noSpend || 0) >= 0 && Number(noSpend || 0) <= 31
 
   return (
     <div className="card flex flex-wrap items-end gap-4">
@@ -164,10 +176,22 @@ function GoalCard({ year, goal }: { year: number; goal: Goal | undefined }) {
         <span className="text-xs text-slate-500">목표 저축률 (%)</span>
         <input type="number" className="input w-28 text-right" value={rate} onChange={(e) => setRate(e.target.value)} />
       </label>
+      <label className="space-y-1">
+        <span className="text-xs text-slate-500">월 무지출 목표 (일)</span>
+        <input type="number" min="0" max="31" className="input w-28 text-right" value={noSpend} onChange={(e) => setNoSpend(e.target.value)} />
+      </label>
       <button
         className="btn btn-primary"
-        disabled={!changed || save.isPending}
-        onClick={() => save.mutate({ id: goal?.id, year, monthly_saving_target: target ?? 0, saving_rate_target: Number(rate || 0) })}
+        disabled={!changed || !noSpendValid || save.isPending}
+        onClick={() =>
+          save.mutate({
+            id: goal?.id,
+            year,
+            monthly_saving_target: target ?? 0,
+            saving_rate_target: Number(rate || 0),
+            no_spend_target: Number(noSpend || 0),
+          })
+        }
       >
         저장
       </button>

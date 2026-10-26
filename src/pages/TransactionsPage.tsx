@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { useAppSettings } from '../api/settings'
 import { useDeleteTransaction, useSearchTransactions, useTagSuggestions, useTransactions } from '../api/transactions'
+import CardCheckCard from '../components/CardCheckCard'
 import type { NewTransactionState } from '../components/Layout'
 import ColorDot from '../components/ColorDot'
 import MonthPicker from '../components/MonthPicker'
@@ -9,7 +11,7 @@ import TransactionForm from '../components/TransactionForm'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { formatWon } from '../lib/format'
-import { sumByType } from '../lib/stats'
+import { isBigSpend, sumByType } from '../lib/stats'
 import { KIND_LABEL, type Transaction, type TxKind, type TxType } from '../lib/types'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
@@ -41,6 +43,7 @@ export default function TransactionsPage() {
   const { categories, categoriesLoaded, majorCategories, paymentMethods, members, majorOf, categoryLabel, memberName, paymentName } =
     useLookups()
   const deleteTransaction = useDeleteTransaction()
+  const { settings } = useAppSettings()
 
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [typeFilter, setTypeFilter] = useState<TxType | ''>('')
@@ -226,7 +229,12 @@ export default function TransactionsPage() {
                     ))}
                   </td>
                   <td className="py-2.5 text-right whitespace-nowrap tabular-nums">
-                    <span className={`font-medium ${t.type === 'income' ? 'text-blue-600' : 'text-slate-900'}`}>
+                    {isBigSpend(t, settings.big_spend_threshold) && (
+                      <span className="mr-1.5 rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-700">큰 지출</span>
+                    )}
+                    <span
+                      className={`font-medium ${t.type === 'income' ? 'text-blue-600' : isBigSpend(t, settings.big_spend_threshold) ? 'text-red-600' : 'text-slate-900'}`}
+                    >
                       {t.type === 'income' ? '+' : '-'}
                       {formatWon(t.amount)}
                     </span>
@@ -259,6 +267,8 @@ export default function TransactionsPage() {
           </span>
         </div>
       </div>
+
+      <CardCheckCard month={month} transactions={monthQuery.data ?? []} />
     </section>
   )
 }

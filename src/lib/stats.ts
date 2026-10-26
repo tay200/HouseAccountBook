@@ -120,3 +120,34 @@ export function forecastMonthEnd(input: { spent: number; variable: number; pendi
   const rest = daysInMonth(month) - day
   return spent + Math.round((variable / day) * rest) + pending
 }
+
+/** 큰 지출: 기준 금액 이상인 변동지출 (설정 > 큰 지출 기준) */
+export function isBigSpend(t: Transaction, threshold: number) {
+  return t.type === 'expense' && t.kind === 'variable' && t.amount >= threshold
+}
+
+/**
+ * 무지출 기록 (변동지출 달력).
+ *   days    : 무지출 성공 일수 (오늘 이전, 변동지출 없는 날)
+ *   current : 지금 이어지는 연속 일수. 이번 달이면 어제부터 거꾸로, 지난달이면 말일부터 거꾸로 센다
+ *   best    : 이 달 최장 연속 일수
+ * hasRecords 가 false 면(가계부를 안 쓴 달) 모두 0.
+ */
+export function noSpendStats(month: string, spentByDate: Map<string, number>, today: string, hasRecords: boolean) {
+  const result = { days: 0, current: 0, best: 0 }
+  if (!hasRecords) return result
+  let run = 0
+  for (let d = 1; d <= daysInMonth(month); d++) {
+    const date = `${month}-${String(d).padStart(2, '0')}`
+    if (date >= today) break // 오늘·미래는 아직 모른다
+    if (spentByDate.get(date)) {
+      run = 0
+    } else {
+      run += 1
+      result.days += 1
+      result.best = Math.max(result.best, run)
+    }
+  }
+  result.current = run // 반복이 끝난 시점(어제 또는 말일)까지 이어진 연속
+  return result
+}

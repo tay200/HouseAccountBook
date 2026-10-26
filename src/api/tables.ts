@@ -15,6 +15,7 @@ import type {
   MonthlySnapshot,
   NetWorthSnapshot,
   RealAsset,
+  Reconciliation,
   RecurringRule,
   SavingGoal,
   StockHolding,
@@ -70,6 +71,25 @@ export const favoritesApi = createTableApi<FavoriteTransaction>('favorite_transa
 export const giftEventsApi = createTableApi<GiftEvent>('gift_events', {
   order: [{ column: 'date', ascending: false }, { column: 'created_at', ascending: false }],
 })
+
+// 잔액 맞추기 기록 (통장 기록 잔액, 카드 월 사용액 대조)
+export const reconciliationsApi = createTableApi<Reconciliation>('reconciliations', {
+  order: [{ column: 'date', ascending: false }, { column: 'created_at', ascending: false }],
+})
+
+/** 카드 사용액 대조: 결제수단·달마다 1줄이라 있으면 덮어쓴다 */
+export function useSavePaymentCheck() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (values: { payment_method_id: string; date: string; actual: number; recorded: number }) => {
+      const { error } = await supabase
+        .from('reconciliations')
+        .upsert({ ...values, target: 'payment' }, { onConflict: 'user_id,payment_method_id,date' })
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: reconciliationsApi.key }),
+  })
+}
 
 // 모으기 목표 (특별비 적립 + 저축 목표)
 export const savingGoalsApi = createTableApi<SavingGoal>('saving_goals', { order: [{ column: 'due_month' }, { column: 'created_at' }] })

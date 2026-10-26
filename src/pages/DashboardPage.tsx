@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router'
 import { useBudgetsRange } from '../api/budgets'
+import { useAppSettings } from '../api/settings'
 import { goalsApi, monthlySnapshotsApi, recurringRulesApi } from '../api/tables'
 import { useTransactions } from '../api/transactions'
 import BudgetBar from '../components/BudgetBar'
@@ -7,6 +8,7 @@ import ColorDot from '../components/ColorDot'
 import MonthlyTrendChart from '../components/MonthlyTrendChart'
 import MonthPicker from '../components/MonthPicker'
 import NoSpendCalendar from '../components/NoSpendCalendar'
+import CashFlowSankey from '../components/CashFlowSankey'
 import { SignedWon, StatCard } from '../components/Numbers'
 import { useAssetSummary } from '../hooks/useAssetSummary'
 import { useLookups } from '../hooks/useLookups'
@@ -23,9 +25,10 @@ import {
   monthSummary,
   sumExpenseBy,
   sumGrouped,
+  isBigSpend,
   sumWhere,
 } from '../lib/stats'
-import type { MonthlySnapshot } from '../lib/types'
+import type { MonthlySnapshot, Transaction } from '../lib/types'
 
 function percent(ratio: number | null) {
   return ratio === null || !Number.isFinite(ratio) ? '-' : `${Math.round(ratio * 100)}%`
@@ -42,7 +45,8 @@ export default function DashboardPage() {
   const { data: yearBudgets = [], isSuccess: budgetsLoaded } = useBudgetsRange(january, month)
   const { data: goals = [] } = goalsApi.useList()
   const { data: rules = [] } = recurringRulesApi.useList()
-  const { majorCategories, majorOf, memberName, paymentName } = useLookups()
+  const { majorCategories, majorOf, memberName, paymentName, categoryLabel } = useLookups()
+  const { settings } = useAppSettings()
 
   const thisMonth = recent.filter((t) => t.date.startsWith(month))
   const lastMonth = recent.filter((t) => t.date.startsWith(prevMonth))
@@ -189,7 +193,7 @@ export default function DashboardPage() {
 
             <div className="card">
               <h3 className="mb-2 font-semibold">변동지출 달력</h3>
-              <NoSpendCalendar month={month} spentByDate={variableByDate} hasRecords={thisMonth.length > 0} />
+              <NoSpendCalendar month={month} spentByDate={variableByDate} hasRecords={thisMonth.length > 0} target={goal?.no_spend_target ?? 0} />
             </div>
 
             <div className="grid gap-6 sm:grid-cols-2">
@@ -198,6 +202,19 @@ export default function DashboardPage() {
             </div>
 
             <AssetChangeCard month={month} />
+
+            <BigSpendCard
+              rows={thisMonth.filter((t) => isBigSpend(t, settings.big_spend_threshold)).sort((a, b) => b.amount - a.amount)}
+              threshold={settings.big_spend_threshold}
+              label={(t) => t.memo || categoryLabel(t.category_id)}
+              sub={(t) => categoryLabel(t.category_id)}
+            />
+          </div>
+
+          <div className="card">
+            <h3 className="mb-1 font-semibold">{formatMonthShort(month)} 돈의 흐름</h3>
+            <p className="mb-3 text-xs text-slate-500">들어온 돈이 저축·소비·남은 돈으로 어떻게 나뉘었는지 보여줘요. 칸에 마우스를 올리면 금액이 보여요.</p>
+            <CashFlowSankey transactions={thisMonth} majorOf={(id) => majorOf(id)} />
           </div>
 
           <div className="card">
@@ -354,6 +371,51 @@ function BreakdownCard({ title, rows, total }: { title: string; rows: { id: stri
             ))}
           </tbody>
         </table>
+      )}
+    </div>
+  )
+}
+
+type BigSpendProps = {
+  /** 이번 달 큰 지출 (금액 큰 순) */
+  rows: Transaction[]
+  threshold: number
+  label: (t: Transaction) => string
+  sub: (t: Transaction) => string
+}
+
+/** 이번 달 큰 지출: 기준 금액(설정) 이상인 변동지출 중 큰 순서로 5건 */
+function BigSpendCard({ rows, threshold, label, sub }: BigSpendProps) {
+  const { search } = useLocation()
+  const total = rows.reduce((s, t) => s + t.amount, 0)
+  return (
+    <div className="card">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h3 className="font-semibold">이번 달 큰 지출</h3>
+        <Link to={{ pathname: '/settings', search }} className="text-xs text-blue-600 hover:underline">
+          기준 바꾸기
+        </Link>
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        {formatWon(threshold)} 이상 변동지출{rows.length > 0 && ` · ${rows.length}건 ${formatWon(total)}`}
+      </p>
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-slate-400">큰 지출이 없어요.</p>
+      ) : (
+        <ol className="divide-y divide-slate-100 text-sm">
+          {rows.slice(0, 5).map((t, i) => (
+            <li key={t.id} className="flex items-center gap-3 py-2">
+              <span className="w-4 text-xs text-slate-400 tabular-nums">{i + 1}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{label(t)}</span>
+                <span className="block text-xs text-slate-400">
+                  {Number(t.date.slice(5, 7))}/{Number(t.date.slice(8, 10))} · {sub(t)}
+                </span>
+              </span>
+              <span className="font-medium text-red-600 tabular-nums">{formatWon(t.amount)}</span>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
   )
