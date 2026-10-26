@@ -135,7 +135,7 @@ export default function DashboardPage() {
             <StatCard label="차액" value={formatWon(summary.balance)} valueClass={summary.balance < 0 ? 'text-red-600' : ''} />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <div className="card">
               <h3 className="mb-4 font-semibold">소비성 지출 분석</h3>
               {analysisRows.length === 0 ? (
