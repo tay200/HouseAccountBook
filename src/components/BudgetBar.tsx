@@ -14,7 +14,8 @@ type Props = {
 
 /** 예산 대비 사용량 막대. 80% 이상이면 주의, 100% 를 넘으면 초과로 표시 */
 export default function BudgetBar({ spent, budget }: Props) {
-  const ratio = budget > 0 ? spent / budget : 0
+  // 이월로 깎여 예산이 0원 이하가 되면, 조금이라도 쓰면 초과
+  const ratio = budget > 0 ? spent / budget : spent > 0 ? Infinity : 0
   const status = ratio > 1 ? STATUS.over : ratio >= 0.8 ? STATUS.warning : STATUS.good
   const remaining = budget - spent
 
@@ -27,7 +28,7 @@ export default function BudgetBar({ spent, budget }: Props) {
         />
       </div>
       <div className={`flex justify-between text-xs tabular-nums ${status.text}`}>
-        <span>{Math.round(ratio * 100)}% 사용</span>
+        <span>{Number.isFinite(ratio) ? `${Math.round(ratio * 100)}% 사용` : '예산 없음'}</span>
         <span>{remaining >= 0 ? `${formatWon(remaining)} 남음` : `${formatWon(-remaining)} 초과`}</span>
       </div>
     </div>

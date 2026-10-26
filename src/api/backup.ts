@@ -12,6 +12,8 @@ const TABLES: [table: TableName, label: string, orderBy: string][] = [
   ['members', '사람', 'id'],
   ['budgets', '예산', 'id'],
   ['goals', '저축 목표', 'id'],
+  ['recurring_rules', '반복 거래', 'id'],
+  ['saving_goals', '모으기 목표', 'id'],
   ['invest_accounts', '투자 계좌', 'id'],
   ['stock_holdings', '보유 종목 (직접 입력)', 'id'],
   ['stock_trades', '매수·매도 기록', 'id'],
@@ -50,6 +52,7 @@ export async function downloadBackup() {
     payment_method_id: nameOf('payment_methods'),
     member_id: nameOf('members'),
     account_id: nameOf('invest_accounts'),
+    bank_account_id: nameOf('bank_accounts'),
   }
   const withNames = (rows: Row[]) =>
     rows.map((r) => {

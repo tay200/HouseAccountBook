@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { useDeleteTransaction, useSearchTransactions, useTransactions } from '../api/transactions'
+import { useDeleteTransaction, useSearchTransactions, useTagSuggestions, useTransactions } from '../api/transactions'
 import type { NewTransactionState } from '../components/Layout'
 import ColorDot from '../components/ColorDot'
 import MonthPicker from '../components/MonthPicker'
+import RecurringCard from '../components/RecurringCard'
 import TransactionForm from '../components/TransactionForm'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
@@ -47,6 +48,8 @@ export default function TransactionsPage() {
   const [majorFilter, setMajorFilter] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('')
   const [memberFilter, setMemberFilter] = useState('')
+  const [tagFilter, setTagFilter] = useState('')
+  const { data: tagOptions = [] } = useTagSuggestions()
   const [search, setSearch] = useState('')
   const [searchAllMonths, setSearchAllMonths] = useState(false)
   // 모든 달에서 찾을 때는 글자를 칠 때마다 조회하지 않도록, 입력이 0.3초 멈추면 검색어로 확정한다
@@ -83,6 +86,7 @@ export default function TransactionsPage() {
       (!majorFilter || (majorFilter === 'none' ? !t.category_id : majorOf(t.category_id)?.id === majorFilter)) &&
       (!paymentFilter || t.payment_method_id === paymentFilter) &&
       (!memberFilter || (memberFilter === 'shared' ? !t.member_id : t.member_id === memberFilter)) &&
+      (!tagFilter || t.tags.includes(tagFilter)) &&
       matchesSearch(t, search.trim()),
   )
   const incomeTotal = sumByType(filtered, 'income')
@@ -110,6 +114,8 @@ export default function TransactionsPage() {
           에서 카테고리를 추가해 보세요.
         </p>
       )}
+
+      <RecurringCard month={month} transactions={monthQuery.data ?? []} />
 
       <TransactionForm
         // 새 거래 폼은 달을 바꿔도 다시 만들지 않는다 (입력 중인 내용 유지, 날짜만 그 달로)
@@ -165,6 +171,14 @@ export default function TransactionsPage() {
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
+          {tagOptions.length > 0 && (
+            <select className="input" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+              <option value="">전체 태그</option>
+              {tagOptions.map((t) => (
+                <option key={t} value={t}>#{t}</option>
+              ))}
+            </select>
+          )}
           <div className="flex min-w-60 flex-1 items-center gap-2">
             <input className="input min-w-0 flex-1" placeholder="내용 또는 금액 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
             <label className="flex shrink-0 items-center gap-1 text-sm text-slate-600">
@@ -205,7 +219,12 @@ export default function TransactionsPage() {
                     </span>
                   </td>
                   <td className="py-2.5 pr-3 whitespace-nowrap text-slate-600">{paymentName(t.payment_method_id)}</td>
-                  <td className="py-2.5 pr-3 text-slate-600">{t.memo}</td>
+                  <td className="py-2.5 pr-3 text-slate-600">
+                    {t.memo}
+                    {t.tags.map((tag) => (
+                      <span key={tag} className="ml-1.5 rounded-full bg-violet-50 px-1.5 py-0.5 text-xs whitespace-nowrap text-violet-700">#{tag}</span>
+                    ))}
+                  </td>
                   <td className="py-2.5 text-right whitespace-nowrap tabular-nums">
                     <span className={`font-medium ${t.type === 'income' ? 'text-blue-600' : 'text-slate-900'}`}>
                       {t.type === 'income' ? '+' : '-'}

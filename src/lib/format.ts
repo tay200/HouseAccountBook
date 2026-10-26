@@ -49,6 +49,19 @@ export function shiftMonth(month: string, delta: number) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}`
 }
 
+/** 'YYYY-MM' 달의 날짜 수 */
+export function daysInMonth(month: string) {
+  const [year, mon] = month.split('-').map(Number)
+  return new Date(year, mon, 0).getDate() // 다음 달의 0일 = 이번 달 마지막 날
+}
+
+/** from 에서 to 까지 몇 달 차이인지 ('2026-01' → '2026-03' = 2). 'YYYY-MM-DD' 를 넣어도 달만 본다 */
+export function monthDiff(from: string, to: string) {
+  const [fy, fm] = from.split('-').map(Number)
+  const [ty, tm] = to.split('-').map(Number)
+  return (ty - fy) * 12 + (tm - fm)
+}
+
 /** '2026-10' → '2026-10-01' */
 export function monthStart(month: string) {
   return `${month}-01`
@@ -63,4 +76,14 @@ export function formatMonth(month: string) {
 /** '2026-10' → '10월' */
 export function formatMonthShort(month: string) {
   return `${Number(month.split('-')[1])}월`
+}
+
+/** '#제주여행 #가족, 이사' → ['제주여행', '가족', '이사'] (공백·쉼표로 나누고 # 은 뗀다, 중복 제거) */
+export function parseTags(text: string) {
+  return [...new Set(text.split(/[\s,]+/).map((t) => t.replace(/^#+/, '').trim()).filter(Boolean))]
+}
+
+/** ['제주여행', '가족'] → '#제주여행 #가족' */
+export function formatTags(tags: string[]) {
+  return tags.map((t) => `#${t}`).join(' ')
 }

@@ -4,6 +4,7 @@ import { useTransactions } from '../api/transactions'
 import AmountInput from '../components/AmountInput'
 import MonthlyTrendChart from '../components/MonthlyTrendChart'
 import PivotTable from '../components/PivotTable'
+import TagTable from '../components/TagTable'
 import { useLookups } from '../hooks/useLookups'
 import { currentMonth, formatNumber, todayString } from '../lib/format'
 import { monthSummary } from '../lib/stats'
@@ -18,6 +19,7 @@ const TABS: Tab[] = [
   { key: 'expenseDetail', label: '세부항목별 지출' },
   { key: 'payment', label: '카드별 지출' },
   { key: 'member', label: '사람별 지출' },
+  { key: 'tag', label: '태그별' },
 ]
 
 function percent(ratio: number | null) {
@@ -56,7 +58,7 @@ export default function ReportPage() {
     expenseDetail: { filter: isExpense, rowKey: (t: Transaction) => t.category_id ?? '', rowLabel: (k: string) => categoryLabel(k || null) },
     payment: { filter: isExpense, rowKey: (t: Transaction) => t.payment_method_id ?? '', rowLabel: (k: string) => paymentName(k || null) || '선택 안 함' },
     member: { filter: isExpense, rowKey: (t: Transaction) => t.member_id ?? '', rowLabel: (k: string) => memberName(k || null) },
-  }[tab]!
+  }[tab]
 
   return (
     <section className="space-y-6">
@@ -138,7 +140,7 @@ export default function ReportPage() {
             </button>
           ))}
         </div>
-        <PivotTable transactions={transactions} {...pivot} />
+        {pivot ? <PivotTable transactions={transactions} {...pivot} /> : <TagTable transactions={transactions} />}
       </div>
     </section>
   )

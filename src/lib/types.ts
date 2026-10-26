@@ -12,6 +12,8 @@ export type Category = {
   type: TxType
   color: string
   parent_id: string | null // null 이면 대분류
+  /** 예산 이월 (대분류만 의미 있음) */
+  rollover: boolean
 }
 
 export type PaymentMethod = {
@@ -36,6 +38,59 @@ export type Transaction = {
   payment_method_id: string | null
   member_id: string | null // null = 공동
   memo: string | null
+  /** 반복 거래 규칙에서 [확인]으로 만든 거래면 그 규칙 id */
+  recurring_id: string | null
+  /** 카테고리와 따로 붙이는 꼬리표 ('#' 없이 저장) */
+  tags: string[]
+}
+
+/** 매달 같은 날 나가는(들어오는) 거래의 규칙. 그 달의 '예정' 거래로 보여주고 [확인]하면 실제 거래가 된다 */
+export type RecurringRule = {
+  id: string
+  memo: string
+  type: TxType
+  kind: TxKind
+  amount: number
+  category_id: string | null
+  payment_method_id: string | null
+  member_id: string | null
+  /** 매월 며칠 (그 달 마지막 날보다 크면 마지막 날) */
+  day: number
+  start_month: string // 'YYYY-MM-01'
+  end_month: string | null // 비우면 계속
+  active: boolean
+}
+
+/** sinking = 쓸 돈 모으기 (명절·자동차세), goal = 목표 모으기 (전세·차) */
+export type SavingGoalKind = 'sinking' | 'goal'
+/** 모은 돈을 어디서 읽을지: 직접 입력 / 통장 기록의 통장 잔액 / 자산의 계좌 잔액 */
+export type SavingSource = 'manual' | 'book' | 'account'
+
+export type SavingGoal = {
+  id: string
+  name: string
+  kind: SavingGoalKind
+  target_amount: number
+  start_month: string // 'YYYY-MM-01'
+  due_month: string // 'YYYY-MM-01'
+  /** 기한이 지나면 다음 해 같은 기간으로 넘어간다 */
+  repeat_yearly: boolean
+  source: SavingSource
+  saved_amount: number // source = manual 일 때
+  book: string | null // source = book 일 때
+  bank_account_id: string | null // source = account 일 때
+  memo: string | null
+}
+
+export const SAVING_GOAL_KIND_LABEL: Record<SavingGoalKind, string> = {
+  sinking: '쓸 돈',
+  goal: '목표',
+}
+
+export const SAVING_SOURCE_LABEL: Record<SavingSource, string> = {
+  manual: '직접 입력',
+  book: '통장 기록',
+  account: '계좌 잔액',
 }
 
 export type Budget = {
@@ -240,9 +295,11 @@ export type LedgerEntry = {
 }
 
 // 새로 만들 때는 id 가 없다 (DB 가 만들어 줌)
-export type CategoryInput = Omit<Category, 'id'>
+// 이월 여부는 예산 화면에서 따로 바꾼다
+export type CategoryInput = Omit<Category, 'id' | 'rollover'>
 export type PaymentMethodInput = Omit<PaymentMethod, 'id'>
-export type TransactionInput = Omit<Transaction, 'id'>
+// recurring_id 는 반복 거래를 [확인]할 때만 넣는다 (일반 입력·수정에서는 건드리지 않음)
+export type TransactionInput = Omit<Transaction, 'id' | 'recurring_id'> & { recurring_id?: string }
 
 export const TX_TYPE_LABEL: Record<TxType, string> = {
   income: '수입',

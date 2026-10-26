@@ -13,6 +13,8 @@ import type {
   MonthlySnapshot,
   NetWorthSnapshot,
   RealAsset,
+  RecurringRule,
+  SavingGoal,
   StockHolding,
   StockPrice,
   StockTrade,
@@ -23,7 +25,7 @@ import { createTableApi } from './createTableApi'
 // '목록 + 추가/수정/삭제'만 필요한 테이블들
 // 사람을 지우면 이 테이블들의 member_id 가 비워지므로 함께 새로고침
 export const membersApi = createTableApi<Member>('members', {
-  alsoInvalidate: [['transactions'], ['ledger_entries'], ['bank_accounts'], ['deposits'], ['installment_savings'], ['invest_accounts']],
+  alsoInvalidate: [['transactions'], ['ledger_entries'], ['bank_accounts'], ['deposits'], ['installment_savings'], ['invest_accounts'], ['recurring_rules']],
 })
 export const goalsApi = createTableApi<Goal>('goals', { order: [{ column: 'year' }] })
 
@@ -40,7 +42,8 @@ export const investIncomesApi = createTableApi<InvestIncome>('invest_incomes', {
   order: [{ column: 'income_date' }, { column: 'created_at' }],
 })
 
-export const bankAccountsApi =createTableApi<BankAccount>('bank_accounts')
+// 계좌를 지우면 그 계좌를 보던 모으기 목표의 연결이 비워진다
+export const bankAccountsApi = createTableApi<BankAccount>('bank_accounts', { alsoInvalidate: [['saving_goals']] })
 export const depositsApi = createTableApi<Deposit>('deposits')
 export const savingsApi = createTableApi<InstallmentSaving>('installment_savings')
 export const loansApi = createTableApi<Loan>('loans')
@@ -51,6 +54,15 @@ export const snapshotsApi = createTableApi<NetWorthSnapshot>('net_worth_snapshot
 export const ledgerApi = createTableApi<LedgerEntry>('ledger_entries', {
   order: [{ column: 'date' }, { column: 'created_at' }],
 })
+
+// 반복 거래 규칙 (매달 예정 거래로 보여주고 [확인]하면 실제 거래가 됨). 규칙을 지우면 만든 거래의 연결이 비워진다
+export const recurringRulesApi = createTableApi<RecurringRule>('recurring_rules', {
+  order: [{ column: 'day' }, { column: 'created_at' }],
+  alsoInvalidate: [['transactions']],
+})
+
+// 모으기 목표 (특별비 적립 + 저축 목표)
+export const savingGoalsApi = createTableApi<SavingGoal>('saving_goals', { order: [{ column: 'due_month' }, { column: 'created_at' }] })
 
 // ─────────────────────────────────────────────
 // 월별 자산 기록: 앱을 열 때 이번 달 줄을 덮어쓴다 (useMonthlySnapshotSync)

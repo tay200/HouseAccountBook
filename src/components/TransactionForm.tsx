@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { useMemoSuggestions, useSaveTransaction, type MemoSuggestion } from '../api/transactions'
+import { useMemoSuggestions, useSaveTransaction, useTagSuggestions, type MemoSuggestion } from '../api/transactions'
 import { useLookups } from '../hooks/useLookups'
-import { formatWon, toDateString, todayString } from '../lib/format'
+import { formatTags, formatWon, parseTags, toDateString, todayString } from '../lib/format'
 import { KIND_LABEL, KINDS_BY_TYPE, type Transaction, type TxKind, type TxType } from '../lib/types'
 import AmountInput from './AmountInput'
 
@@ -35,6 +35,7 @@ function daysAgo(days: number) {
 export default function TransactionForm({ month, editing, onDone, onSaved, focusRequest = 0 }: Props) {
   const { categories, majorCategories, paymentMethods, members, categoryById, categoryLabel } = useLookups()
   const { data: suggestions } = useMemoSuggestions()
+  const { data: tagSuggestions = [] } = useTagSuggestions()
 
   // 수정 모드면 저장된 카테고리에서 대분류/소분류를 거꾸로 찾아낸다
   const editingCategory = editing?.category_id ? categoryById.get(editing.category_id) : undefined
@@ -52,6 +53,8 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
   const [payAmount, setPayAmount] = useState<number | null>(editing ? editing.amount + editing.discount : null)
   const [discount, setDiscount] = useState<number | null>(editing?.discount || null)
   const [memo, setMemo] = useState(editing?.memo ?? '')
+  // 태그는 '#제주여행 #가족' 처럼 글자로 입력받고 저장할 때 나눈다
+  const [tagsText, setTagsText] = useState(editing ? formatTags(editing.tags) : '')
   const save = useSaveTransaction()
   const formRef = useRef<HTMLFormElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
@@ -89,6 +92,9 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
   const majorOptions = majorCategories.filter((c) => c.type === type)
   const subOptions = categories.filter((c) => c.parent_id && c.parent_id === majorId)
   const netAmount = (payAmount ?? 0) - (discount ?? 0)
+  const tags = parseTags(tagsText)
+  // 아직 붙이지 않은 태그 중 많이 쓴 것 몇 개를 추천 칩으로
+  const tagChips = tagSuggestions.filter((t) => !tags.includes(t)).slice(0, 8)
 
   function changeType(next: TxType) {
     setType(next)
@@ -129,6 +135,7 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
         payment_method_id: paymentMethodId || null,
         member_id: memberId || null,
         memo: memo.trim() || null,
+        tags,
       },
       {
         onSuccess: () => {
@@ -136,7 +143,7 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
           if (editing) {
             onDone()
           } else {
-            // 연달아 입력하기 편하도록 날짜·구분·사람·카테고리·결제수단은 남기고 금액·내용만 비운 뒤 내용 칸으로
+            // 연달아 입력하기 편하도록 날짜·구분·사람·카테고리·결제수단·태그는 남기고 금액·내용만 비운 뒤 내용 칸으로
             // (내용을 고르면 자동완성이 분류·결제수단을 채워 준다)
             setPayAmount(null)
             setDiscount(null)
@@ -254,6 +261,28 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
             <AmountInput className="w-full" value={discount} onChange={setDiscount} />
           </Field>
         )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex min-w-60 flex-1 items-center gap-2">
+          <span className="shrink-0 text-xs text-slate-500">태그</span>
+          <input
+            className="input min-w-0 flex-1"
+            value={tagsText}
+            onChange={(e) => setTagsText(e.target.value)}
+            placeholder="#제주여행 #이사 (카테고리와 상관없이 묶어 볼 때)"
+          />
+        </label>
+        {tagChips.map((t) => (
+          <button
+            key={t}
+            type="button"
+            className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-200"
+            onClick={() => setTagsText(formatTags([...tags, t]))}
+          >
+            +#{t}
+          </button>
+        ))}
       </div>
 
       <div className="flex items-center justify-end gap-3">

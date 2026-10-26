@@ -5,7 +5,7 @@ import { fetchAll } from './fetchAll'
 import type { Transaction, TransactionInput } from '../lib/types'
 
 /** 화면에서 쓰는 거래 열 */
-const SELECT_COLUMNS = 'id, date, type, kind, amount, discount, category_id, payment_method_id, member_id, memo'
+const SELECT_COLUMNS = 'id, date, type, kind, amount, discount, category_id, payment_method_id, member_id, memo, recurring_id, tags'
 
 /**
  * fromMonth ~ toMonth(포함) 사이의 거래를 최신순으로 가져온다.
@@ -119,6 +119,28 @@ export function useSearchTransactions(term: string) {
       // 두 조회 결과를 합치고(겹치는 거래는 한 번만) 최신순으로
       const rows = new Map((await Promise.all([byMemo, byAmount])).flat().map((t) => [t.id, t]))
       return ([...rows.values()] as Transaction[]).sort((a, b) => b.date.localeCompare(a.date))
+    },
+  })
+}
+
+/**
+ * 지금까지 쓴 태그 → 사용 횟수 (최근 거래 1000건 기준, 많이 쓴 순).
+ * 입력 폼의 태그 추천과 거래 목록의 태그 필터에 쓴다.
+ */
+export function useTagSuggestions() {
+  return useQuery({
+    queryKey: ['transactions', 'tag-suggestions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('tags')
+        .not('tags', 'eq', '{}')
+        .order('date', { ascending: false })
+        .limit(1000)
+      if (error) throw error
+      const counts = new Map<string, number>()
+      for (const row of data) for (const tag of row.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tag]) => tag)
     },
   })
 }

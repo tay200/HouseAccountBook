@@ -112,6 +112,7 @@ export type Database = {
           id: string
           name: string
           parent_id: string | null
+          rollover: boolean
           type: string
           user_id: string
         }
@@ -121,6 +122,7 @@ export type Database = {
           id?: string
           name: string
           parent_id?: string | null
+          rollover?: boolean
           type: string
           user_id?: string
         }
@@ -130,6 +132,7 @@ export type Database = {
           id?: string
           name?: string
           parent_id?: string | null
+          rollover?: boolean
           type?: string
           user_id?: string
         }
@@ -591,6 +594,108 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_rules: {
+        Row: {
+          active: boolean
+          amount: number
+          category_id: string | null
+          created_at: string
+          day: number
+          end_month: string | null
+          id: string
+          kind: string
+          member_id: string | null
+          memo: string
+          payment_method_id: string | null
+          start_month: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          amount: number
+          category_id?: string | null
+          created_at?: string
+          day?: number
+          end_month?: string | null
+          id?: string
+          kind: string
+          member_id?: string | null
+          memo: string
+          payment_method_id?: string | null
+          start_month: string
+          type: string
+          user_id?: string
+        }
+        Update: {
+          active?: boolean
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          day?: number
+          end_month?: string | null
+          id?: string
+          kind?: string
+          member_id?: string | null
+          memo?: string
+          payment_method_id?: string | null
+          start_month?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      saving_goals: {
+        Row: {
+          bank_account_id: string | null
+          book: string | null
+          created_at: string
+          due_month: string
+          id: string
+          kind: string
+          memo: string | null
+          name: string
+          repeat_yearly: boolean
+          saved_amount: number
+          source: string
+          start_month: string
+          target_amount: number
+          user_id: string
+        }
+        Insert: {
+          bank_account_id?: string | null
+          book?: string | null
+          created_at?: string
+          due_month: string
+          id?: string
+          kind?: string
+          memo?: string | null
+          name: string
+          repeat_yearly?: boolean
+          saved_amount?: number
+          source?: string
+          start_month: string
+          target_amount: number
+          user_id?: string
+        }
+        Update: {
+          bank_account_id?: string | null
+          book?: string | null
+          created_at?: string
+          due_month?: string
+          id?: string
+          kind?: string
+          memo?: string | null
+          name?: string
+          repeat_yearly?: boolean
+          saved_amount?: number
+          source?: string
+          start_month?: string
+          target_amount?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       schema_migrations: {
         Row: {
           applied_at: string
@@ -831,6 +936,8 @@ export type Database = {
           member_id: string | null
           memo: string | null
           payment_method_id: string | null
+          recurring_id: string | null
+          tags: string[]
           type: string
           user_id: string
         }
@@ -845,6 +952,8 @@ export type Database = {
           member_id?: string | null
           memo?: string | null
           payment_method_id?: string | null
+          recurring_id?: string | null
+          tags?: string[]
           type: string
           user_id?: string
         }
@@ -859,6 +968,8 @@ export type Database = {
           member_id?: string | null
           memo?: string | null
           payment_method_id?: string | null
+          recurring_id?: string | null
+          tags?: string[]
           type?: string
           user_id?: string
         }

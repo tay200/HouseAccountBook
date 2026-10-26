@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router'
-import { useBudgets } from '../api/budgets'
-import { goalsApi, monthlySnapshotsApi } from '../api/tables'
+import { useBudgetsRange } from '../api/budgets'
+import { goalsApi, monthlySnapshotsApi, recurringRulesApi } from '../api/tables'
 import { useTransactions } from '../api/transactions'
 import BudgetBar from '../components/BudgetBar'
 import ColorDot from '../components/ColorDot'
@@ -12,8 +12,19 @@ import { useAssetSummary } from '../hooks/useAssetSummary'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { currentMonth, formatMonth, formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
+import { pendingAmount, recurringForMonth } from '../lib/recurring'
 import { changeRate, previousSnapshot, snapshotOf } from '../lib/snapshots'
-import { budgetUsage, isConsumption, monthSummary, sumExpenseBy, sumGrouped } from '../lib/stats'
+import {
+  budgetCarry,
+  budgetUsage,
+  consumptionByMonth,
+  forecastMonthEnd,
+  isConsumption,
+  monthSummary,
+  sumExpenseBy,
+  sumGrouped,
+  sumWhere,
+} from '../lib/stats'
 import type { MonthlySnapshot } from '../lib/types'
 
 function percent(ratio: number | null) {
@@ -27,9 +38,11 @@ export default function DashboardPage() {
   const prevMonth = shiftMonth(month, -1)
   // 작년 12월 ~ 올해 12월을 한 번에 받아서 이번 달 요약, 전월 대비(1월이면 작년 12월), 연간 차트 모두에 쓴다
   const { data: recent = [], isPending } = useTransactions(shiftMonth(january, -1), `${year}-12`)
-  const { data: budgets = [], isSuccess: budgetsLoaded } = useBudgets(month)
+  // 1월 ~ 이번 달 예산 (이번 달 예산 + 이월 계산)
+  const { data: yearBudgets = [], isSuccess: budgetsLoaded } = useBudgetsRange(january, month)
   const { data: goals = [] } = goalsApi.useList()
-  const { majorOf, memberName, paymentName } = useLookups()
+  const { data: rules = [] } = recurringRulesApi.useList()
+  const { majorCategories, majorOf, memberName, paymentName } = useLookups()
 
   const thisMonth = recent.filter((t) => t.date.startsWith(month))
   const lastMonth = recent.filter((t) => t.date.startsWith(prevMonth))
@@ -49,9 +62,30 @@ export default function DashboardPage() {
   const byMajor = (list: typeof recent) => sumGrouped(list, isConsumption, (t) => majorOf(t.category_id)?.id ?? '')
   const thisByMajor = byMajor(thisMonth)
   const lastByMajor = byMajor(lastMonth)
+  // 이월을 켠 대분류는 같은 해 지난달까지 남거나 넘친 돈을 이번 달 예산에 더한다 (예산 화면과 같은 계산)
+  const majorIdOf = (t: (typeof recent)[number]) => majorOf(t.category_id)?.id ?? ''
+  const carry = budgetCarry(yearBudgets, consumptionByMonth(recent, majorIdOf), month, new Set(majorCategories.filter((c) => c.rollover).map((c) => c.id)))
+  const budgets = yearBudgets
+    .filter((b) => b.month.startsWith(month))
+    .map((b) => ({ ...b, amount: b.amount + (carry.get(b.category_id) ?? 0) }))
   const budgetByCategory = new Map(budgets.map((b) => [b.category_id, b.amount]))
+  const budgetIds = new Set(budgetByCategory.keys())
+
+  // 예산을 정한 카테고리에서 아직 [확인]하지 않은 반복 지출 (하루 금액·월말 예상에 미리 넣는다)
+  const pending = pendingAmount(
+    recurringForMonth(rules, thisMonth, month),
+    (r) => r.type === 'expense' && r.kind !== 'saving' && budgetIds.has(majorOf(r.category_id)?.id ?? ''),
+  )
   // 남은 예산 카드: 예산 화면과 같은 기준 (예산을 정한 대분류의 소비성 지출)
-  const usage = budgetUsage(budgets, thisByMajor, month, todayString())
+  const today = todayString()
+  const usage = budgetUsage(budgets, thisByMajor, month, today, pending)
+  const forecast = forecastMonthEnd({
+    spent: usage.spent,
+    variable: sumWhere(thisMonth, (t) => t.type === 'expense' && t.kind === 'variable' && budgetIds.has(majorIdOf(t))),
+    pending,
+    month,
+    today,
+  })
   const analysisRows = [...new Set([...thisByMajor.keys(), ...lastByMajor.keys()])]
     .map((id) => {
       const category = majorOf(id || null)
@@ -82,7 +116,7 @@ export default function DashboardPage() {
         <p className="card py-16 text-center text-sm text-slate-400">불러오는 중…</p>
       ) : (
         <>
-          {budgetsLoaded && <BudgetLeftCard usage={usage} month={month} />}
+          {budgetsLoaded && <BudgetLeftCard usage={usage} forecast={forecast} month={month} />}
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
             <StatCard label="총 수입" value={formatWon(summary.income)} valueClass="text-blue-600" />
@@ -176,8 +210,8 @@ export default function DashboardPage() {
   )
 }
 
-/** 맨 위 카드: 이번 달 남은 예산과 하루에 쓸 수 있는 금액 */
-function BudgetLeftCard({ usage, month }: { usage: ReturnType<typeof budgetUsage>; month: string }) {
+/** 맨 위 카드: 이번 달 남은 예산, 하루에 쓸 수 있는 금액, 이 속도면 월말에 얼마를 쓸지 */
+function BudgetLeftCard({ usage, forecast, month }: { usage: ReturnType<typeof budgetUsage>; forecast: number | null; month: string }) {
   const { search } = useLocation()
 
   if (usage.budget === 0) {
@@ -204,7 +238,16 @@ function BudgetLeftCard({ usage, month }: { usage: ReturnType<typeof budgetUsage
         {usage.daysLeft !== null && (
           <p className="mt-1 text-sm text-slate-600">
             {over ? '예산을 넘었어요' : <>하루 <strong className="tabular-nums">{formatWon(usage.perDay ?? 0)}</strong>씩 쓸 수 있어요</>}
-            <span className="text-slate-400"> · 남은 {usage.daysLeft}일</span>
+            <span className="text-slate-400">
+              {' '}
+              · 남은 {usage.daysLeft}일{usage.pending > 0 && ` · 나갈 고정 지출 ${formatWon(usage.pending)} 미리 뺌`}
+            </span>
+          </p>
+        )}
+        {forecast !== null && (
+          <p className={`mt-1 text-sm ${forecast > usage.budget ? 'text-red-600' : 'text-slate-600'}`}>
+            이 속도면 월말 <strong className="tabular-nums">{formatWon(forecast)}</strong>
+            {forecast > usage.budget ? ` · 예산보다 ${formatWon(forecast - usage.budget)} 초과 예상` : ` · ${formatWon(usage.budget - forecast)} 남을 예상`}
           </p>
         )}
       </div>

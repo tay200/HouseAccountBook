@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { monthStart } from '../lib/format'
+import { monthStart, shiftMonth } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import type { Budget } from '../lib/types'
 
@@ -16,6 +16,22 @@ export function useBudgets(month: string) {
   return useQuery({
     queryKey: ['budgets', month],
     queryFn: () => fetchBudgets(month),
+  })
+}
+
+/** fromMonth ~ toMonth(포함) 의 예산 (이월 계산용: 1월 ~ 이번 달) */
+export function useBudgetsRange(fromMonth: string, toMonth: string) {
+  return useQuery({
+    queryKey: ['budgets', 'range', fromMonth, toMonth],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('budgets')
+        .select('id, month, category_id, amount')
+        .gte('month', monthStart(fromMonth))
+        .lt('month', monthStart(shiftMonth(toMonth, 1)))
+      if (error) throw error
+      return data as Budget[]
+    },
   })
 }
 
@@ -47,7 +63,8 @@ export function useSaveBudget() {
       }
       if (result.error) throw result.error
     },
-    onSuccess: (_data, { month }) => queryClient.invalidateQueries({ queryKey: ['budgets', month] }),
+    // ['budgets'] 로 시작하는 캐시(그 달 예산, 이월 계산용 기간 예산)를 모두 새로고침
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['budgets'] }),
   })
 }
 
@@ -63,6 +80,6 @@ export function useCopyBudgets() {
       )
       if (error) throw error
     },
-    onSuccess: (_data, { toMonth }) => queryClient.invalidateQueries({ queryKey: ['budgets', toMonth] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['budgets'] }),
   })
 }

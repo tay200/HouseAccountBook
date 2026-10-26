@@ -4,6 +4,7 @@ import { useSession } from '../auth/session'
 import CategorySettings from '../components/CategorySettings'
 import MemberSettings from '../components/MemberSettings'
 import PaymentMethodSettings from '../components/PaymentMethodSettings'
+import RecurringSettings from '../components/RecurringSettings'
 import { toUserMessage } from '../lib/errors'
 import { supabase } from '../lib/supabase'
 
@@ -30,6 +31,7 @@ export default function SettingsPage() {
         <PaymentMethodSettings />
         <MemberSettings />
       </div>
+      <RecurringSettings />
       <div className="card flex items-center justify-between gap-4">
         <div>
           <h3 className="font-semibold">데이터 백업</h3>
