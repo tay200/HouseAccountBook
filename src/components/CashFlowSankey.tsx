@@ -23,7 +23,7 @@ type Props = {
 }
 
 /** 현금흐름 Sankey: 수입 → 들어온 돈 → 저축성·소비성·남은 돈 → 소비성 대분류 */
-export default function CashFlowSankey({ transactions, majorOf, height = 320 }: Props) {
+export default function CashFlowSankey({ transactions, majorOf, height = 340 }: Props) {
   const flow = buildCashFlow(transactions, majorOf)
   if (!flow) return <p className="py-16 text-center text-sm text-slate-400">이 기간에는 기록이 없어요.</p>
 
@@ -33,7 +33,8 @@ export default function CashFlowSankey({ transactions, majorOf, height = 320 }: 
         data={flow}
         node={FlowNodeShape}
         nodeWidth={10}
-        nodePadding={18}
+        // 이름표가 두 줄이라 칸 사이를 넉넉히
+        nodePadding={28}
         // 링크는 출발 칸 색을 옅게 (색은 이름표와 함께 쓴다)
         link={{ stroke: '#cbd5e1', strokeOpacity: 0.5 }}
         margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
@@ -58,14 +59,20 @@ function FlowNodeShape({ x, y, width, height, payload }: SankeyNodeProps) {
         y={y + height / 2}
         textAnchor={left ? 'end' : 'start'}
         dominantBaseline="middle"
-        fontSize={12}
+        fontSize={11}
         fill={INK}
         // 글자 뒤에 흰 테두리를 깔아 링크 위에서도 읽히게
         stroke="#ffffff"
         strokeWidth={3}
         paintOrder="stroke"
       >
-        {node.name} <tspan fontWeight={600}>{formatManwon(node.value)}</tspan>
+        {/* 이름과 금액을 두 줄로: 휴대폰처럼 열 사이가 좁아도 옆 칸과 겹치지 않게 */}
+        <tspan x={textX} dy="-0.6em">
+          {node.name}
+        </tspan>
+        <tspan x={textX} dy="1.2em" fontWeight={600}>
+          {formatManwon(node.value)}
+        </tspan>
       </text>
     </g>
   )
