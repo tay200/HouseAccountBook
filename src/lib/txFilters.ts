@@ -2,11 +2,14 @@ import type { TxKind, TxType } from './types'
 
 /**
  * 거래 내역 화면의 필터. 다른 화면에서 숫자를 누르면 이 값을 주소(?major=...)에 담아 거래 내역으로 보낸다.
+ * kind: 성격 또는 'consumption'(소비성 = 저축성이 아닌 지출)
  * major: 대분류 id 또는 'none'(미분류), payment: 결제수단 id 또는 'none', member: 사람 id 또는 'shared'(공동)
  */
+export type KindFilter = TxKind | 'consumption' | ''
+
 export type TxFilters = {
   type: TxType | ''
-  kind: TxKind | ''
+  kind: KindFilter
   major: string
   payment: string
   member: string
@@ -15,7 +18,7 @@ export type TxFilters = {
 
 const KEYS = ['type', 'kind', 'major', 'payment', 'member', 'tag'] as const
 const TYPES: readonly string[] = ['income', 'expense']
-const KINDS: readonly string[] = ['fixed', 'variable', 'saving', 'extra']
+const KINDS: readonly string[] = ['fixed', 'variable', 'saving', 'extra', 'consumption']
 
 /** 주소의 필터 값. 없거나 잘못된 값은 '' (전체) */
 export function readTxFilters(params: URLSearchParams): TxFilters {
@@ -24,7 +27,7 @@ export function readTxFilters(params: URLSearchParams): TxFilters {
   const kind = get('kind')
   return {
     type: TYPES.includes(type) ? (type as TxType) : '',
-    kind: KINDS.includes(kind) ? (kind as TxKind) : '',
+    kind: KINDS.includes(kind) ? (kind as KindFilter) : '',
     major: get('major'),
     payment: get('payment'),
     member: get('member'),

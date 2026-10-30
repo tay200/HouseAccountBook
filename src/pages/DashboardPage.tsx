@@ -125,11 +125,12 @@ export default function DashboardPage() {
           {budgetsLoaded && <BudgetLeftCard usage={usage} forecast={forecast} month={month} />}
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-            <StatCard label="총 수입" value={formatWon(summary.income)} valueClass="text-blue-600" />
-            <StatCard label="총 지출" value={formatWon(summary.expense)} />
-            <StatCard label="소비성 지출" value={formatWon(summary.consumption)} />
+            <StatCard label="총 수입" value={formatWon(summary.income)} valueClass="text-blue-600" to={transactionsLink(search, { type: 'income' })} />
+            <StatCard label="총 지출" value={formatWon(summary.expense)} to={transactionsLink(search, { type: 'expense' })} />
+            <StatCard label="소비성 지출" value={formatWon(summary.consumption)} to={transactionsLink(search, { kind: 'consumption' })} />
             <StatCard
               label="저축성 지출"
+              to={transactionsLink(search, { type: 'expense', kind: 'saving' })}
               value={formatWon(summary.saving)}
               sub={goal?.monthly_saving_target ? `목표 ${formatWon(goal.monthly_saving_target)} 중 ${percent(summary.saving / goal.monthly_saving_target)}` : undefined}
             />
@@ -167,7 +168,7 @@ export default function DashboardPage() {
                           <tr key={r.id}>
                             <td className="py-2 pr-2 whitespace-nowrap">
                               <Link
-                                to={transactionsLink(search, { type: 'expense', major: r.id || 'none' })}
+                                to={transactionsLink(search, { kind: 'consumption', major: r.id || 'none' })}
                                 className="inline-flex items-center gap-2 hover:text-blue-700 hover:underline"
                               >
                                 <ColorDot color={r.color} />

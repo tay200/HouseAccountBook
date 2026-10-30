@@ -4,7 +4,7 @@ import { useMonthlySnapshotSync } from '../hooks/useMonthlySnapshotSync'
 
 const navItems = [
   { to: '/', label: '대시보드' },
-  { to: '/transactions', label: '거래 내역' },
+  { to: '/transactions', label: '수입/지출 내역' },
   { to: '/budget', label: '예산' },
   { to: '/report', label: '연간 리포트' },
   { to: '/invest', label: '투자' },

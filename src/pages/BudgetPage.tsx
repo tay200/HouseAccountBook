@@ -140,7 +140,7 @@ function BudgetRow({ month, category, budget, carry, spent }: RowProps) {
     <tr>
       <td className="py-2 pr-3 whitespace-nowrap">
         <Link
-          to={transactionsLink(search, { type: 'expense', major: category.id })}
+          to={transactionsLink(search, { kind: 'consumption', major: category.id })}
           className="inline-flex items-center gap-2 hover:text-blue-700 hover:underline"
         >
           <ColorDot color={category.color} />

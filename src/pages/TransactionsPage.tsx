@@ -11,8 +11,8 @@ import TransactionForm from '../components/TransactionForm'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { formatWon } from '../lib/format'
-import { isBigSpend, sumByType } from '../lib/stats'
-import { hasTxFilters, readTxFilters, removeTxFilters } from '../lib/txFilters'
+import { isBigSpend, isConsumption, sumByType } from '../lib/stats'
+import { hasTxFilters, readTxFilters, removeTxFilters, type KindFilter } from '../lib/txFilters'
 import { KIND_LABEL, type Transaction, type TxKind, type TxType } from '../lib/types'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
@@ -31,11 +31,17 @@ function matchesSearch(t: Transaction, term: string) {
   return /^\d+$/.test(digits) && t.amount === Number(digits)
 }
 
-const KIND_BADGE: Record<TxKind, string> = {
-  fixed: 'bg-slate-100 text-slate-600',
-  extra: 'bg-sky-50 text-sky-700',
-  saving: 'bg-emerald-50 text-emerald-700',
-  variable: 'bg-orange-50 text-orange-700',
+// 성격 배지: 수입은 파랑 계열, 지출은 빨강 계열 (같은 계열 안에서 진하기로 구분)
+const KIND_BADGE: Record<TxType, Partial<Record<TxKind, string>>> = {
+  income: {
+    fixed: 'bg-blue-100 text-blue-800',
+    extra: 'bg-sky-50 text-sky-700',
+  },
+  expense: {
+    variable: 'bg-red-50 text-red-600',
+    fixed: 'bg-red-100 text-red-800',
+    saving: 'bg-rose-50 text-rose-700',
+  },
 }
 
 export default function TransactionsPage() {
@@ -53,7 +59,7 @@ export default function TransactionsPage() {
   // 대시보드·예산에서 숫자를 누르고 들어오면 주소에 담긴 필터로 시작한다
   const [initial] = useState(() => readTxFilters(new URLSearchParams(location.search)))
   const [typeFilter, setTypeFilter] = useState<TxType | ''>(initial.type)
-  const [kindFilter, setKindFilter] = useState<TxKind | ''>(initial.kind)
+  const [kindFilter, setKindFilter] = useState<KindFilter>(initial.kind)
   const [majorFilter, setMajorFilter] = useState(initial.major)
   const [paymentFilter, setPaymentFilter] = useState(initial.payment)
   const [memberFilter, setMemberFilter] = useState(initial.member)
@@ -104,7 +110,7 @@ export default function TransactionsPage() {
   const filtered = transactions.filter(
     (t) =>
       (!typeFilter || t.type === typeFilter) &&
-      (!kindFilter || t.kind === kindFilter) &&
+      (!kindFilter || (kindFilter === 'consumption' ? isConsumption(t) : t.kind === kindFilter)) &&
       (!majorFilter || (majorFilter === 'none' ? !t.category_id : majorOf(t.category_id)?.id === majorFilter)) &&
       (!paymentFilter || (paymentFilter === 'none' ? !t.payment_method_id : t.payment_method_id === paymentFilter)) &&
       (!memberFilter || (memberFilter === 'shared' ? !t.member_id : t.member_id === memberFilter)) &&
@@ -123,7 +129,7 @@ export default function TransactionsPage() {
   return (
     <section className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-2xl font-bold">거래 내역</h2>
+        <h2 className="text-2xl font-bold">수입/지출 내역</h2>
         <MonthPicker month={month} onChange={setMonth} />
       </header>
 
@@ -159,8 +165,9 @@ export default function TransactionsPage() {
             <option value="expense">지출</option>
             <option value="income">수입</option>
           </select>
-          <select className="input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value as TxKind | '')}>
+          <select className="input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value as KindFilter)}>
             <option value="">전체 성격</option>
+            <option value="consumption">소비성지출 (변동+고정)</option>
             <option value="variable">변동지출</option>
             <option value="fixed">고정 (수입·지출)</option>
             <option value="saving">저축성지출</option>
@@ -235,7 +242,7 @@ export default function TransactionsPage() {
                 <tr key={t.id} className={editing?.id === t.id ? 'bg-blue-50' : 'hover:bg-slate-50'}>
                   <td className="py-2.5 pr-3 whitespace-nowrap text-slate-600">{formatDay(t.date, searchingAll)}</td>
                   <td className="py-2.5 pr-3">
-                    <span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${KIND_BADGE[t.kind]}`}>
+                    <span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${KIND_BADGE[t.type][t.kind] ?? 'bg-slate-100 text-slate-600'}`}>
                       {t.type === 'income' ? `${KIND_LABEL[t.kind]}수입` : KIND_LABEL[t.kind]}
                     </span>
                   </td>

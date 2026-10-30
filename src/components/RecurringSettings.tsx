@@ -48,7 +48,7 @@ export default function RecurringSettings() {
       <div>
         <h3 className="font-semibold">반복 거래</h3>
         <p className="text-sm text-slate-500">
-          관리비·보험료·통신비·적금 이체처럼 매달 나가는 거래를 등록하면, 거래 내역 맨 위에 그 달의 예정 거래로 보여요. [확인]을 누르면 실제 거래가 돼요.
+          관리비·보험료·통신비·적금 이체처럼 매달 나가는 거래를 등록하면, 수입/지출 내역 맨 위에 그 달의 예정 거래로 보여요. [확인]을 누르면 실제 거래가 돼요.
         </p>
       </div>
       <CrudTable

@@ -20,6 +20,7 @@ describe('readTxFilters', () => {
       type: 'expense', kind: 'variable', major: '', payment: 'none', member: '', tag: '',
     })
     expect(readTxFilters(new URLSearchParams('type=abc&kind=zzz'))).toMatchObject({ type: '', kind: '' })
+    expect(readTxFilters(new URLSearchParams('kind=consumption')).kind).toBe('consumption')
   })
 })
 
