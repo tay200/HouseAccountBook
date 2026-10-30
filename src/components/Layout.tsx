@@ -23,7 +23,7 @@ const tabItemsAfterAdd = [{ to: '/budget', label: '예산' }]
 const moreItems = navItems.filter((item) => !['/', '/transactions', '/budget'].includes(item.to))
 
 /** 다른 화면에 있다가 (+)를 누르면 거래 내역으로 가면서 입력 폼을 열라고 알려주는 표시 */
-export type NewTransactionState = { newTransaction: true }
+export type NewTransactionState = { newTransaction: true; /** 있으면 이 날짜로 입력 시작 (대시보드 달력에서) */ date?: string }
 
 export default function Layout() {
   // 메뉴를 옮겨도 ?month=... 가 유지되도록 현재 주소의 쿼리스트링을 그대로 붙인다

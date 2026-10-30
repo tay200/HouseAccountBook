@@ -11,7 +11,7 @@ import SavingGoalsCard from '../components/SavingGoalsCard'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
-import { budgetCarry, budgetUsage, consumptionByMonth, isConsumption, sumGrouped } from '../lib/stats'
+import { budgetCarry, budgetUsage, consumptionByMonth, isConsumption, monthElapsed, sumGrouped } from '../lib/stats'
 import { transactionsLink } from '../lib/txFilters'
 import type { Budget, Category } from '../lib/types'
 
@@ -67,7 +67,7 @@ export default function BudgetPage() {
             </button>
           )}
         </div>
-        {totalBudget > 0 && <BudgetBar spent={totalSpent} budget={totalBudget} />}
+        {totalBudget > 0 && <BudgetBar spent={totalSpent} budget={totalBudget} elapsed={monthElapsed(month, todayString())} />}
       </div>
 
       <div className="card">
@@ -179,7 +179,7 @@ function BudgetRow({ month, category, budget, carry, spent }: RowProps) {
       </td>
       <td className="py-2 text-right tabular-nums">{formatWon(spent)}</td>
       <td className="py-2 pl-6">
-        {budget ? <BudgetBar spent={spent} budget={budget.amount + carry} /> : <span className="text-xs text-slate-400">-</span>}
+        {budget ? <BudgetBar spent={spent} budget={budget.amount + carry} elapsed={monthElapsed(month, todayString())} /> :<span className="text-xs text-slate-400">-</span>}
       </td>
     </tr>
   )

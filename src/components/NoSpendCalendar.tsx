@@ -11,12 +11,16 @@ type Props = {
   hasRecords: boolean
   /** 월 무지출 목표 일수 (0 이면 목표 없음, 연간 리포트 > 재무 목표에서 정함) */
   target?: number
+  /** 고른 날짜 (그날 내역을 아래에 펼칠 때) */
+  selected?: string | null
+  /** 있으면 날짜 칸을 누를 수 있다. 같은 날을 다시 누르면 null (닫기) */
+  onSelect?: (date: string | null) => void
 }
 
 /**
  * 변동지출 달력. 오늘 이전인데 변동지출이 없는 날은 '무지출'로 표시한다. (엑셀 '변동지출 달력')
  */
-export default function NoSpendCalendar({ month, spentByDate, hasRecords, target = 0 }: Props) {
+export default function NoSpendCalendar({ month, spentByDate, hasRecords, target = 0, selected, onSelect }: Props) {
   const first = new Date(`${monthStart(month)}T00:00:00`)
   const today = todayString()
   // 달력 첫 칸 = 1일이 속한 주의 일요일
@@ -66,16 +70,29 @@ export default function NoSpendCalendar({ month, spentByDate, hasRecords, target
         {visible.map(({ date, inMonth }) => {
           const spent = spentByDate.get(date) ?? 0
           const noSpend = inMonth && isNoSpend(date)
-          return (
-            <div
-              key={date}
-              className={`flex h-14 flex-col items-center justify-start rounded-md pt-1 ${
-                !inMonth ? 'opacity-0' : noSpend ? 'bg-emerald-50' : date === today ? 'ring-1 ring-blue-300' : 'bg-slate-50'
-              }`}
-            >
+          const className = `flex h-14 min-w-0 flex-col items-center justify-start rounded-md pt-1 ${
+            !inMonth ? 'opacity-0' : noSpend ? 'bg-emerald-50' : date === today ? 'ring-1 ring-blue-300' : 'bg-slate-50'
+          } ${date === selected ? 'ring-2 ring-blue-500' : ''}`
+          const content = (
+            <>
               <span className="text-slate-500">{Number(date.slice(8))}</span>
               {inMonth && spent > 0 && <span className="mt-0.5 font-medium tabular-nums">{formatNumber(spent)}</span>}
               {noSpend && <span className="mt-0.5 font-medium text-emerald-700">무지출</span>}
+            </>
+          )
+          return onSelect && inMonth ? (
+            <button
+              key={date}
+              type="button"
+              className={`${className} hover:bg-blue-50`}
+              aria-pressed={date === selected}
+              onClick={() => onSelect(date === selected ? null : date)}
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={date} className={className}>
+              {content}
             </div>
           )
         })}

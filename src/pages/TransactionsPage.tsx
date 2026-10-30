@@ -93,13 +93,16 @@ export default function TransactionsPage() {
   const { data: transactions = [], isPending } = searchingAll ? searchQuery : monthQuery
 
   // 휴대폰 하단 (+) 버튼으로 들어오면: 수정 중이던 것을 닫고 새 거래 폼에 포커스
-  const wantsNew = (location.state as NewTransactionState | null)?.newTransaction === true
+  const newState = location.state as NewTransactionState | null
+  const wantsNew = newState?.newTransaction === true
   const [focusRequest, setFocusRequest] = useState(0)
+  const [requestedDate, setRequestedDate] = useState<string | undefined>()
   const [handledKey, setHandledKey] = useState<string | null>(null)
   if (wantsNew && handledKey !== location.key) {
     // 같은 이동(location.key)은 한 번만 처리한다
     setHandledKey(location.key)
     setEditing(null)
+    setRequestedDate(newState.date)
     setFocusRequest((n) => n + 1)
   }
   useEffect(() => {
@@ -152,6 +155,7 @@ export default function TransactionsPage() {
         editing={editing}
         onDone={() => setEditing(null)}
         focusRequest={focusRequest}
+        requestedDate={requestedDate}
         onSaved={(date) => {
           // 다른 달 날짜로 저장했으면 그 달로 이동해서 방금 저장한 거래가 보이게 한다
           if (!date.startsWith(month)) setMonth(date.slice(0, 7))

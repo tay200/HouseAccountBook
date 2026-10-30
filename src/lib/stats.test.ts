@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { toCsv } from './csv'
 import { parseTags, shiftMonth } from './format'
-import { budgetCarry, budgetUsage, consumptionByMonth, forecastMonthEnd, isBigSpend, monthSummary, noSpendStats } from './stats'
+import {
+  budgetCarry,
+  budgetUsage,
+  consumptionByMonth,
+  cumulativeByDay,
+  forecastMonthEnd,
+  isBigSpend,
+  isConsumption,
+  monthElapsed,
+  monthSummary,
+  noSpendStats,
+} from './stats'
 import type { Transaction } from './types'
 
 const tx = (fields: Partial<Transaction>): Transaction => ({
@@ -143,5 +154,28 @@ describe('noSpendStats', () => {
   })
   it('기록이 없는 달은 0', () => {
     expect(noSpendStats('2026-09', new Map(), '2026-10-10', false)).toEqual({ days: 0, current: 0, best: 0 })
+  })
+})
+
+describe('monthElapsed', () => {
+  it('이번 달이면 오늘까지 지난 비율, 다른 달이면 null', () => {
+    expect(monthElapsed('2026-10', '2026-10-31')).toBe(1)
+    expect(monthElapsed('2026-11', '2026-11-15')).toBe(0.5)
+    expect(monthElapsed('2026-09', '2026-10-15')).toBeNull()
+  })
+})
+
+describe('cumulativeByDay', () => {
+  it('날마다 누적, 다른 달·조건 밖 거래는 빼고', () => {
+    const list = [
+      tx({ date: '2026-02-01', amount: 1000 }),
+      tx({ date: '2026-02-03', amount: 500 }),
+      tx({ date: '2026-02-03', kind: 'saving', amount: 9000 }),
+      tx({ date: '2026-03-01', amount: 7000 }),
+    ]
+    const result = cumulativeByDay(list, '2026-02', isConsumption)
+    expect(result).toHaveLength(28)
+    expect(result.slice(0, 4)).toEqual([1000, 1000, 1500, 1500])
+    expect(result[27]).toBe(1500)
   })
 })

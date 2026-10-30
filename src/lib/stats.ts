@@ -121,6 +121,22 @@ export function forecastMonthEnd(input: { spent: number; variable: number; pendi
   return spent + Math.round((variable / day) * rest) + pending
 }
 
+/** 이 달이 얼마나 지났는지 (0~1, 오늘 하루까지 포함). 보고 있는 달이 이번 달이 아니면 null */
+export function monthElapsed(month: string, today: string) {
+  if (!today.startsWith(month)) return null
+  return Number(today.slice(8, 10)) / daysInMonth(month)
+}
+
+/** 1일부터 날마다 누적한 합계. [1일까지, 2일까지, …] 그 달 일수만큼 (지난달 같은 날까지 비교용) */
+export function cumulativeByDay(transactions: Transaction[], month: string, predicate: (t: Transaction) => boolean) {
+  const daily = Array.from({ length: daysInMonth(month) }, () => 0)
+  for (const t of transactions) {
+    if (t.date.startsWith(month) && predicate(t)) daily[Number(t.date.slice(8, 10)) - 1] += t.amount
+  }
+  let sum = 0
+  return daily.map((v) => (sum += v))
+}
+
 /** 큰 지출: 기준 금액 이상인 변동지출 (설정 > 큰 지출 기준) */
 export function isBigSpend(t: Transaction, threshold: number) {
   return t.type === 'expense' && t.kind === 'variable' && t.amount >= threshold

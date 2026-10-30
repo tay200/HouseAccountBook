@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useBudgetsRange } from '../api/budgets'
 import { useAppSettings } from '../api/settings'
@@ -9,19 +10,23 @@ import MonthlyTrendChart from '../components/MonthlyTrendChart'
 import MonthPicker from '../components/MonthPicker'
 import NoSpendCalendar from '../components/NoSpendCalendar'
 import CashFlowSankey from '../components/CashFlowSankey'
+import type { NewTransactionState } from '../components/Layout'
+import PaceCompareChart from '../components/PaceCompareChart'
 import { SignedWon, StatCard } from '../components/Numbers'
 import { useAssetSummary } from '../hooks/useAssetSummary'
 import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { currentMonth, formatMonth, formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
-import { pendingAmount, recurringForMonth } from '../lib/recurring'
+import { pendingAmount, recurringForMonth, type RecurringItem } from '../lib/recurring'
 import { changeRate, previousSnapshot, snapshotOf } from '../lib/snapshots'
 import {
   budgetCarry,
   budgetUsage,
   consumptionByMonth,
+  cumulativeByDay,
   forecastMonthEnd,
   isConsumption,
+  monthElapsed,
   monthSummary,
   sumExpenseBy,
   sumGrouped,
@@ -53,6 +58,9 @@ export default function DashboardPage() {
   const thisMonth = recent.filter((t) => t.date.startsWith(month))
   const lastMonth = recent.filter((t) => t.date.startsWith(prevMonth))
   const summary = monthSummary(thisMonth)
+  // 달력에서 고른 날 (다른 달로 넘어가면 자연히 풀린다)
+  const [pickedDate, setPickedDate] = useState<string | null>(null)
+  const selectedDate = pickedDate?.startsWith(month) ? pickedDate : null
   const goal = goals.find((g) => g.year === Number(month.slice(0, 4)))
 
   const trend = Array.from({ length: 12 }, (_, i) => {
@@ -199,8 +207,39 @@ export default function DashboardPage() {
 
             <div className="card">
               <h3 className="mb-2 font-semibold">변동지출 달력</h3>
-              <NoSpendCalendar month={month} spentByDate={variableByDate} hasRecords={thisMonth.length > 0} target={goal?.no_spend_target ?? 0} />
+              <NoSpendCalendar
+                month={month}
+                spentByDate={variableByDate}
+                hasRecords={thisMonth.length > 0}
+                target={goal?.no_spend_target ?? 0}
+                selected={selectedDate}
+                onSelect={setPickedDate}
+              />
+              {selectedDate ? (
+                <DayDetail
+                  date={selectedDate}
+                  rows={thisMonth.filter((t) => t.date === selectedDate)}
+                  label={(t) => t.memo || categoryLabel(t.category_id)}
+                  sub={(t) => categoryLabel(t.category_id)}
+                />
+              ) : (
+                <p className="mt-2 text-xs text-slate-400">날짜를 누르면 그날 내역을 보고 바로 입력할 수 있어요.</p>
+              )}
             </div>
+
+            <div className="card">
+              <h3 className="mb-1 font-semibold">지난달 같은 날과 비교</h3>
+              <p className="mb-3 text-xs text-slate-500">소비성 지출을 1일부터 쌓아 지난달 같은 날짜까지와 비교해요.</p>
+              <PaceCompareChart
+                month={month}
+                lastMonth={prevMonth}
+                current={cumulativeByDay(thisMonth, month, isConsumption)}
+                last={cumulativeByDay(lastMonth, prevMonth, isConsumption)}
+                todayDay={today.startsWith(month) ? Number(today.slice(8, 10)) : null}
+              />
+            </div>
+
+            <UpcomingRecurringCard items={recurringForMonth(rules, thisMonth, month)} today={today} label={(r) => r.memo || categoryLabel(r.category_id)} />
 
             <div className="grid gap-6 sm:grid-cols-2">
               <BreakdownCard
@@ -291,7 +330,7 @@ function BudgetLeftCard({ usage, forecast, month }: { usage: ReturnType<typeof b
         )}
       </div>
       <div className="w-full sm:w-80">
-        <BudgetBar spent={usage.spent} budget={usage.budget} />
+        <BudgetBar spent={usage.spent} budget={usage.budget} elapsed={monthElapsed(month, todayString())} />
       </div>
     </div>
   )
@@ -451,4 +490,104 @@ function BigSpendCard({ rows, threshold, label, sub }: BigSpendProps) {
 
 function Empty() {
   return <p className="py-6 text-center text-sm text-slate-400">이번 달 지출이 없어요.</p>
+}
+
+type DayDetailProps = {
+  date: string
+  /** 그날 거래 (수입·지출 모두) */
+  rows: Transaction[]
+  label: (t: Transaction) => string
+  sub: (t: Transaction) => string
+}
+
+/** 달력에서 고른 날의 내역 + 그 날짜로 바로 입력 */
+function DayDetail({ date, rows, label, sub }: DayDetailProps) {
+  const { search } = useLocation()
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">
+          {Number(date.slice(5, 7))}/{Number(date.slice(8, 10))} 내역
+          <span className="ml-1 font-normal text-slate-500">{rows.length}건</span>
+        </p>
+        <Link
+          to={{ pathname: '/transactions', search }}
+          // 수입/지출 내역 화면이 이 표시를 보고 입력 폼을 이 날짜로 연다
+          state={{ newTransaction: true, date } satisfies NewTransactionState}
+          className="btn btn-secondary py-1 text-sm"
+        >
+          + 이 날짜로 입력
+        </Link>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-3 text-center text-sm text-slate-400">이날은 기록이 없어요.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100 text-sm">
+          {rows.map((t) => (
+            <li key={t.id} className="flex items-center gap-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{label(t)}</span>
+                <span className="block text-xs text-slate-400">{sub(t)}</span>
+              </span>
+              <span className={`font-medium tabular-nums ${t.type === 'income' ? 'text-blue-600' : ''}`}>
+                {t.type === 'income' ? '+' : '-'}
+                {formatWon(t.amount)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** 이 달에 아직 [확인]하지 않은 반복 거래를 날짜순으로 (확인은 수입/지출 내역 화면에서) */
+function UpcomingRecurringCard({ items, today, label }: { items: RecurringItem[]; today: string; label: (r: RecurringItem['rule']) => string }) {
+  const { search } = useLocation()
+  if (items.length === 0) return null
+  const pending = items.filter((i) => !i.done).sort((a, b) => a.date.localeCompare(b.date))
+  const expenseTotal = pending.filter((i) => i.rule.type === 'expense').reduce((s, i) => s + i.rule.amount, 0)
+
+  /** 'D-3', '오늘', '날짜 지남' */
+  function dday(date: string) {
+    const days = Math.round((new Date(`${date}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000)
+    return days < 0 ? '날짜 지남' : days === 0 ? '오늘' : `D-${days}`
+  }
+
+  return (
+    <div className="card">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h3 className="font-semibold">곧 나갈 고정 거래</h3>
+        <Link to={{ pathname: '/transactions', search }} className="text-xs text-blue-600 hover:underline">
+          내역에서 확인하기
+        </Link>
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        {pending.length === 0 ? `이번 달 ${items.length}건 모두 처리했어요` : `예정 ${pending.length}건${expenseTotal ? ` · 지출 ${formatWon(expenseTotal)}` : ''}`}
+      </p>
+      {pending.length > 0 && (
+        <ul className="divide-y divide-slate-100 text-sm">
+          {pending.slice(0, 6).map(({ rule, date }) => {
+            const left = dday(date)
+            return (
+              <li key={rule.id} className="flex items-center gap-3 py-2">
+                <span className={`w-16 shrink-0 text-xs tabular-nums ${left === '날짜 지남' ? 'font-medium text-amber-700' : 'text-slate-500'}`}>
+                  {Number(date.slice(5, 7))}/{Number(date.slice(8, 10))} {left === '날짜 지남' ? '' : left}
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  {label(rule)}
+                  {left === '날짜 지남' && <span className="ml-2 text-xs text-amber-700">날짜 지남</span>}
+                </span>
+                <span className={`font-medium tabular-nums ${rule.type === 'income' ? 'text-blue-600' : ''}`}>
+                  {rule.type === 'income' ? '+' : '-'}
+                  {formatWon(rule.amount)}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {pending.length > 6 && <p className="pt-2 text-xs text-slate-400">외 {pending.length - 6}건</p>}
+    </div>
+  )
 }

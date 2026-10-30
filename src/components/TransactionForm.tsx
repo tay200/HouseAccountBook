@@ -16,6 +16,8 @@ type Props = {
   onSaved: (date: string) => void
   /** 값이 바뀔 때마다 폼으로 스크롤하고 내용 칸에 포커스 (휴대폰 하단 (+) 버튼). 0 이면 아무것도 안 함 */
   focusRequest?: number
+  /** focusRequest 와 함께 오면 날짜도 이 날로 바꾼다 (대시보드 달력에서 고른 날) */
+  requestedDate?: string
 }
 
 /** 이번 달을 보고 있으면 오늘, 다른 달이면 그 달 1일 */
@@ -33,7 +35,7 @@ function daysAgo(days: number) {
 
 // 부모가 key 를 바꿔주면 이 컴포넌트가 새로 만들어지면서 useState 초기값이 다시 적용된다.
 // (수정할 거래가 바뀔 때 폼 내용을 갈아끼우는 가장 간단한 방법)
-export default function TransactionForm({ month, editing, onDone, onSaved, focusRequest = 0 }: Props) {
+export default function TransactionForm({ month, editing, onDone, onSaved, focusRequest = 0, requestedDate }: Props) {
   const { categories, majorCategories, paymentMethods, members, categoryById, categoryLabel } = useLookups()
   const { data: suggestions } = useMemoSuggestions()
   const { data: tagSuggestions = [] } = useTagSuggestions()
@@ -81,6 +83,12 @@ export default function TransactionForm({ month, editing, onDone, onSaved, focus
   }, [editing])
 
   // 하단 (+) 버튼: 폼으로 화면을 옮기고 내용 칸부터 입력하게 한다
+  // 0 부터 시작: 다른 화면에서 들어와 처음부터 focusRequest 가 1 이어도 날짜를 반영하도록
+  const [handledFocus, setHandledFocus] = useState(0)
+  if (focusRequest !== handledFocus) {
+    setHandledFocus(focusRequest)
+    if (requestedDate) setDate(requestedDate)
+  }
   useEffect(() => {
     if (!focusRequest) return
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
