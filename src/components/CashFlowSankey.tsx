@@ -1,4 +1,4 @@
-import { ResponsiveContainer, Sankey, Tooltip, type SankeyNodeProps } from 'recharts'
+import { ResponsiveContainer, Sankey, Tooltip, type SankeyLinkProps, type SankeyNodeProps } from 'recharts'
 import { buildCashFlow, type FlowKind, type FlowNode } from '../lib/cashflow'
 import { formatManwon, formatWon } from '../lib/format'
 import type { Transaction } from '../lib/types'
@@ -35,14 +35,32 @@ export default function CashFlowSankey({ transactions, majorOf, height = 340 }: 
         nodeWidth={10}
         // 이름표가 두 줄이라 칸 사이를 넉넉히
         nodePadding={28}
-        // 링크는 출발 칸 색을 옅게 (색은 이름표와 함께 쓴다)
-        link={{ stroke: '#cbd5e1', strokeOpacity: 0.5 }}
+        link={FlowLinkShape}
         margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
         iterations={64}
       >
         <Tooltip formatter={(value) => formatWon(Number(value))} contentStyle={{ borderRadius: 8, borderColor: '#e2e8f0', fontSize: 13 }} />
       </Sankey>
     </ResponsiveContainer>
+  )
+}
+
+/**
+ * 줄기 하나: 돈이 흘러가는 곳의 색을 옅게 채운다 (저축=초록, 소비=주황, 남은 돈=회색).
+ * '들어온 돈'으로 모이는 줄기만은 출발한 수입 색으로.
+ */
+function FlowLinkShape({ sourceX, sourceY, sourceControlX, targetX, targetY, targetControlX, linkWidth, payload }: SankeyLinkProps) {
+  const source = payload.source as unknown as FlowNode
+  const target = payload.target as unknown as FlowNode
+  const color = COLOR[target.kind === 'hub' ? source.kind : target.kind]
+  return (
+    <path
+      d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+      fill="none"
+      stroke={color}
+      strokeWidth={linkWidth}
+      strokeOpacity={0.35}
+    />
   )
 }
 

@@ -28,6 +28,7 @@ import {
   isBigSpend,
   sumWhere,
 } from '../lib/stats'
+import { transactionsLink } from '../lib/txFilters'
 import type { MonthlySnapshot, Transaction } from '../lib/types'
 
 function percent(ratio: number | null) {
@@ -36,6 +37,7 @@ function percent(ratio: number | null) {
 
 export default function DashboardPage() {
   const [month, setMonth] = useMonth()
+  const { search } = useLocation()
   const year = month.slice(0, 4)
   const january = `${year}-01`
   const prevMonth = shiftMonth(month, -1)
@@ -164,10 +166,13 @@ export default function DashboardPage() {
                         return (
                           <tr key={r.id}>
                             <td className="py-2 pr-2 whitespace-nowrap">
-                              <span className="inline-flex items-center gap-2">
+                              <Link
+                                to={transactionsLink(search, { type: 'expense', major: r.id || 'none' })}
+                                className="inline-flex items-center gap-2 hover:text-blue-700 hover:underline"
+                              >
                                 <ColorDot color={r.color} />
                                 {r.name}
-                              </span>
+                              </Link>
                             </td>
                             <td className="py-2 text-right whitespace-nowrap">{formatWon(r.spent)}</td>
                             <td className="py-2 pl-3">
@@ -197,8 +202,18 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-6 sm:grid-cols-2">
-              <BreakdownCard title="결제수단별 지출" rows={byPayment.map(([id, amount]) => ({ id, name: paymentName(id || null) || '선택 안 함', amount }))} total={summary.expense} />
-              <BreakdownCard title="사람별 지출" rows={byMember.map(([id, amount]) => ({ id, name: memberName(id || null), amount }))} total={summary.expense} />
+              <BreakdownCard
+                title="결제수단별 지출"
+                rows={byPayment.map(([id, amount]) => ({ id, name: paymentName(id || null) || '선택 안 함', amount }))}
+                total={summary.expense}
+                linkOf={(id) => transactionsLink(search, { type: 'expense', payment: id || 'none' })}
+              />
+              <BreakdownCard
+                title="사람별 지출"
+                rows={byMember.map(([id, amount]) => ({ id, name: memberName(id || null), amount }))}
+                total={summary.expense}
+                linkOf={(id) => transactionsLink(search, { type: 'expense', member: id || 'shared' })}
+              />
             </div>
 
             <AssetChangeCard month={month} />
@@ -353,7 +368,15 @@ function AssetRow({ label, value, prev }: { label: string; value: number; prev: 
   )
 }
 
-function BreakdownCard({ title, rows, total }: { title: string; rows: { id: string; name: string; amount: number }[]; total: number }) {
+type BreakdownProps = {
+  title: string
+  rows: { id: string; name: string; amount: number }[]
+  total: number
+  /** 이름을 누르면 갈 거래 내역 (그 항목으로 걸러서) */
+  linkOf: (id: string) => ReturnType<typeof transactionsLink>
+}
+
+function BreakdownCard({ title, rows, total, linkOf }: BreakdownProps) {
   return (
     <div className="card">
       <h3 className="mb-4 font-semibold">{title}</h3>
@@ -364,7 +387,11 @@ function BreakdownCard({ title, rows, total }: { title: string; rows: { id: stri
           <tbody className="divide-y divide-slate-100">
             {rows.map((r) => (
               <tr key={r.id}>
-                <td className="py-2">{r.name}</td>
+                <td className="py-2">
+                  <Link to={linkOf(r.id)} className="hover:text-blue-700 hover:underline">
+                    {r.name}
+                  </Link>
+                </td>
                 <td className="py-2 text-right">{formatWon(r.amount)}</td>
                 <td className="w-12 py-2 text-right text-slate-500">{percent(r.amount / total)}</td>
               </tr>

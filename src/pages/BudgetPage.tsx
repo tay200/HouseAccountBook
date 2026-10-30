@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useLocation } from 'react-router'
 import { useBudgets, useBudgetsRange, useCopyBudgets, useSaveBudget } from '../api/budgets'
 import { useSetRollover } from '../api/categories'
 import { useTransactions } from '../api/transactions'
@@ -11,6 +12,7 @@ import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { formatMonthShort, formatWon, shiftMonth, todayString } from '../lib/format'
 import { budgetCarry, budgetUsage, consumptionByMonth, isConsumption, sumGrouped } from '../lib/stats'
+import { transactionsLink } from '../lib/txFilters'
 import type { Budget, Category } from '../lib/types'
 
 export default function BudgetPage() {
@@ -126,6 +128,7 @@ type RowProps = {
 function BudgetRow({ month, category, budget, carry, spent }: RowProps) {
   const save = useSaveBudget()
   const setRollover = useSetRollover()
+  const { search } = useLocation()
   const [amount, setAmount] = useState<number | null>(budget?.amount ?? null)
 
   function commit() {
@@ -136,10 +139,13 @@ function BudgetRow({ month, category, budget, carry, spent }: RowProps) {
   return (
     <tr>
       <td className="py-2 pr-3 whitespace-nowrap">
-        <span className="inline-flex items-center gap-2">
+        <Link
+          to={transactionsLink(search, { type: 'expense', major: category.id })}
+          className="inline-flex items-center gap-2 hover:text-blue-700 hover:underline"
+        >
           <ColorDot color={category.color} />
           {category.name}
-        </span>
+        </Link>
       </td>
       <td className="py-2">
         <AmountInput

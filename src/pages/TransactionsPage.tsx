@@ -12,6 +12,7 @@ import { useLookups } from '../hooks/useLookups'
 import { useMonth } from '../hooks/useMonth'
 import { formatWon } from '../lib/format'
 import { isBigSpend, sumByType } from '../lib/stats'
+import { hasTxFilters, readTxFilters, removeTxFilters } from '../lib/txFilters'
 import { KIND_LABEL, type Transaction, type TxKind, type TxType } from '../lib/types'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
@@ -45,13 +46,33 @@ export default function TransactionsPage() {
   const deleteTransaction = useDeleteTransaction()
   const { settings } = useAppSettings()
 
+  const location = useLocation()
+  const navigate = useNavigate()
+
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const [typeFilter, setTypeFilter] = useState<TxType | ''>('')
-  const [kindFilter, setKindFilter] = useState<TxKind | ''>('')
-  const [majorFilter, setMajorFilter] = useState('')
-  const [paymentFilter, setPaymentFilter] = useState('')
-  const [memberFilter, setMemberFilter] = useState('')
-  const [tagFilter, setTagFilter] = useState('')
+  // 대시보드·예산에서 숫자를 누르고 들어오면 주소에 담긴 필터로 시작한다
+  const [initial] = useState(() => readTxFilters(new URLSearchParams(location.search)))
+  const [typeFilter, setTypeFilter] = useState<TxType | ''>(initial.type)
+  const [kindFilter, setKindFilter] = useState<TxKind | ''>(initial.kind)
+  const [majorFilter, setMajorFilter] = useState(initial.major)
+  const [paymentFilter, setPaymentFilter] = useState(initial.payment)
+  const [memberFilter, setMemberFilter] = useState(initial.member)
+  const [tagFilter, setTagFilter] = useState(initial.tag)
+  const hasFilter = Boolean(typeFilter || kindFilter || majorFilter || paymentFilter || memberFilter || tagFilter)
+  // 필터는 처음에만 주소에서 읽고 지운다 (메뉴를 옮겨 다녀도 따라다니지 않게, ?month 는 유지)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (hasTxFilters(params)) navigate({ pathname: location.pathname, search: `?${removeTxFilters(params)}` }, { replace: true })
+  }, [location.search, location.pathname, navigate])
+
+  function clearFilters() {
+    setTypeFilter('')
+    setKindFilter('')
+    setMajorFilter('')
+    setPaymentFilter('')
+    setMemberFilter('')
+    setTagFilter('')
+  }
   const { data: tagOptions = [] } = useTagSuggestions()
   const [search, setSearch] = useState('')
   const [searchAllMonths, setSearchAllMonths] = useState(false)
@@ -66,8 +87,6 @@ export default function TransactionsPage() {
   const { data: transactions = [], isPending } = searchingAll ? searchQuery : monthQuery
 
   // 휴대폰 하단 (+) 버튼으로 들어오면: 수정 중이던 것을 닫고 새 거래 폼에 포커스
-  const location = useLocation()
-  const navigate = useNavigate()
   const wantsNew = (location.state as NewTransactionState | null)?.newTransaction === true
   const [focusRequest, setFocusRequest] = useState(0)
   const [handledKey, setHandledKey] = useState<string | null>(null)
@@ -87,7 +106,7 @@ export default function TransactionsPage() {
       (!typeFilter || t.type === typeFilter) &&
       (!kindFilter || t.kind === kindFilter) &&
       (!majorFilter || (majorFilter === 'none' ? !t.category_id : majorOf(t.category_id)?.id === majorFilter)) &&
-      (!paymentFilter || t.payment_method_id === paymentFilter) &&
+      (!paymentFilter || (paymentFilter === 'none' ? !t.payment_method_id : t.payment_method_id === paymentFilter)) &&
       (!memberFilter || (memberFilter === 'shared' ? !t.member_id : t.member_id === memberFilter)) &&
       (!tagFilter || t.tags.includes(tagFilter)) &&
       matchesSearch(t, search.trim()),
@@ -163,6 +182,7 @@ export default function TransactionsPage() {
           </select>
           <select className="input" value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}>
             <option value="">전체 결제수단</option>
+            <option value="none">선택 안 함</option>
             {paymentMethods.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -189,6 +209,11 @@ export default function TransactionsPage() {
               모든 달
             </label>
           </div>
+          {hasFilter && (
+            <button type="button" className="btn btn-text text-sm" onClick={clearFilters}>
+              필터 초기화
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
