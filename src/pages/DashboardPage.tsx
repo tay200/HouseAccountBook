@@ -4,6 +4,7 @@ import { useBudgetsRange } from '../api/budgets'
 import { useAppSettings } from '../api/settings'
 import { goalsApi, monthlySnapshotsApi, recurringRulesApi } from '../api/tables'
 import { useTransactions } from '../api/transactions'
+import AmountInput from '../components/AmountInput'
 import BudgetBar from '../components/BudgetBar'
 import ColorDot from '../components/ColorDot'
 import MonthlyTrendChart from '../components/MonthlyTrendChart'
@@ -34,7 +35,7 @@ import {
   sumWhere,
 } from '../lib/stats'
 import { transactionsLink } from '../lib/txFilters'
-import type { MonthlySnapshot, Transaction } from '../lib/types'
+import type { Goal, MonthlySnapshot, Transaction } from '../lib/types'
 
 function percent(ratio: number | null) {
   return ratio === null || !Number.isFinite(ratio) ? '-' : `${Math.round(ratio * 100)}%`
@@ -140,7 +141,8 @@ export default function DashboardPage() {
               label="저축성 지출"
               to={transactionsLink(search, { type: 'expense', kind: 'saving' })}
               value={formatWon(summary.saving)}
-              sub={goal?.monthly_saving_target ? `목표 ${formatWon(goal.monthly_saving_target)} 중 ${percent(summary.saving / goal.monthly_saving_target)}` : undefined}
+              // 연도가 바뀌면 입력 중이던 값을 비우도록 key 로 다시 만든다
+              footer={<SavingTargetEditor key={month.slice(0, 4)} year={Number(month.slice(0, 4))} goal={goal} saving={summary.saving} />}
             />
             <StatCard
               label="저축률"
@@ -283,6 +285,66 @@ export default function DashboardPage() {
 }
 
 /** 맨 위 카드: 이번 달 남은 예산, 하루에 쓸 수 있는 금액, 이 속도면 월말에 얼마를 쓸지 */
+/**
+ * 저축성 지출 카드 아래 '목표 ○○원 중 ○○%'. 누르면 그 자리에서 월 목표 저축액을 고친다.
+ * 연간 리포트의 '재무 목표'와 같은 값 (그해 목표가 없으면 새로 만든다)
+ */
+function SavingTargetEditor({ year, goal, saving }: { year: number; goal: Goal | undefined; saving: number }) {
+  const save = goalsApi.useSave()
+  const [editing, setEditing] = useState(false)
+  const [target, setTarget] = useState<number | null>(null)
+  const current = goal?.monthly_saving_target ?? 0
+
+  function open() {
+    setTarget(current || null)
+    setEditing(true)
+  }
+
+  function handleSave() {
+    save.mutate(
+      // 새로 만들 때 나머지 목표는 0 (설정 안 함)
+      goal ? { id: goal.id, monthly_saving_target: target ?? 0 } : { year, monthly_saving_target: target ?? 0, saving_rate_target: 0, no_spend_target: 0 },
+      { onSuccess: () => setEditing(false) },
+    )
+  }
+
+  if (!editing) {
+    return (
+      <button type="button" className="text-left text-xs text-slate-500 hover:text-blue-700" title={`${year}년 월 목표 저축액 설정`} onClick={open}>
+        {current ? `목표 ${formatWon(current)} 중 ${percent(saving / current)} ✎` : '+ 목표 설정'}
+      </button>
+    )
+  }
+  return (
+    <div className="space-y-1.5">
+      <AmountInput
+        className="input w-full py-1 text-sm"
+        value={target}
+        placeholder={`${year}년 월 목표`}
+        onChange={setTarget}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSave()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        autoFocus
+      />
+      <div className="flex justify-end gap-1">
+        <button type="button" className="btn btn-text px-2 py-0.5 text-xs" onClick={() => setEditing(false)}>
+          취소
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary px-2 py-0.5 text-xs"
+          disabled={save.isPending || (target ?? 0) === current}
+          onClick={handleSave}
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function BudgetLeftCard({ usage, forecast, month }: { usage: ReturnType<typeof budgetUsage>; forecast: number | null; month: string }) {
   const { search } = useLocation()
 

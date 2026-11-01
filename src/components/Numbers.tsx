@@ -32,10 +32,12 @@ type StatCardProps = {
   className?: string
   /** 있으면 카드를 누를 때 이 주소로 (예: 그 금액의 내역) */
   to?: To
+  /** 카드 아래쪽에 링크와 따로 그릴 내용 (예: 목표 설정 버튼. 눌러도 to 로 넘어가지 않는다) */
+  footer?: ReactNode
 }
 
 /** 화면 위쪽 요약 숫자 카드 (대시보드, 투자, 자산 공용) */
-export function StatCard({ label, value, sub, valueClass = '', className = '', to }: StatCardProps) {
+export function StatCard({ label, value, sub, valueClass = '', className = '', to, footer }: StatCardProps) {
   const body = (
     <>
       <p className="text-sm text-slate-500">
@@ -46,6 +48,15 @@ export function StatCard({ label, value, sub, valueClass = '', className = '', t
       {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
     </>
   )
+  // 링크 안에 버튼을 넣으면 버튼을 눌러도 넘어가 버리므로, footer 가 있으면 링크는 위쪽 숫자 부분만 감싼다
+  if (footer) {
+    return (
+      <div className={`card has-[>a:hover]:border-blue-300 has-[>a:hover]:bg-blue-50/40 ${className}`}>
+        {to ? <Link to={to} className="block">{body}</Link> : body}
+        <div className="mt-1">{footer}</div>
+      </div>
+    )
+  }
   return to ? (
     <Link to={to} className={`card block hover:border-blue-300 hover:bg-blue-50/40 ${className}`}>
       {body}
