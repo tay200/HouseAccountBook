@@ -218,3 +218,13 @@ export function codeProblem(market: Market, code: string): string | null {
   if (market === 'KR') return /^[0-9A-Z]{6}$/.test(code) ? null : '한국 종목코드는 6자리예요 (예: 005930)'
   return /^[A-Z][A-Z0-9.-]{0,9}$/.test(code) ? null : '미국 티커 형식이 올바르지 않아요 (예: AAPL, BRK.B)'
 }
+
+/**
+ * 전에 적어 둔 종목명 (보유분·매매 기록 중 같은 시장·종목코드). 매수 폼에서 티커를 넣으면 먼저 이걸 쓴다.
+ * 매매 기록은 가장 최근 것, 없으면 보유분의 이름. 처음 보는 종목이면 null
+ */
+export function knownStockName(market: Market, code: string, holdings: StockHolding[], trades: StockTrade[]) {
+  const same = (x: { market: Market; stock_code: string; stock_name: string }) => x.market === market && x.stock_code === code && x.stock_name.trim()
+  const trade = trades.filter(same).sort((a, b) => (b.trade_date ?? '').localeCompare(a.trade_date ?? '') || b.created_at.localeCompare(a.created_at))[0]
+  return (trade ?? holdings.find(same))?.stock_name.trim() ?? null
+}

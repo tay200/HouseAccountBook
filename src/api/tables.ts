@@ -156,6 +156,13 @@ export function useSaveStockPrice() {
 
 type PriceResult = { code: string; name?: string; price?: number; error?: string }
 
+/** 미국 티커의 종목명 (네이버 한글 이름, 없으면 야후 영어 이름). 못 찾으면 null */
+export async function lookupUsStockName(ticker: string): Promise<string | null> {
+  const { data, error } = await supabase.functions.invoke<{ results: PriceResult[] }>('stock-prices', { body: { names: [ticker] } })
+  if (error) return null
+  return data?.results?.find((r) => r.code === ticker)?.name ?? null
+}
+
 /**
  * Edge Function(stock-prices)을 불러 현재가를 받아오고 DB 에 저장한다. 실패한 종목 목록을 돌려준다.
  * kr = 한국 종목코드, us = 미국 티커 (미국 종목이 있으면 환율도 함께 받아온다)

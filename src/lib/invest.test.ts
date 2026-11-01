@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeInvest, codeProblem, investSummary, normalizeCode, oversellProblem, withIncomes } from './invest'
+import { analyzeInvest, codeProblem, investSummary, knownStockName, normalizeCode, oversellProblem, withIncomes } from './invest'
 import type { InvestIncome, StockHolding, StockPrice, StockTrade } from './types'
 
 // 테스트용 매매 기록을 짧게 만드는 도우미
@@ -141,5 +141,21 @@ describe('withIncomes', () => {
     const base = { cost: 100, value: 110, unrealized: 10, realized: 5, rate: 0.1 }
     const s = withIncomes(base, [income('sale', 40_733), income('sale', -1_000), income('dividend', 815)])
     expect(s).toMatchObject({ realized: 5 + 39_733, dividend: 815, earned: 5 + 39_733 + 815, value: 110 })
+  })
+})
+
+describe('knownStockName', () => {
+  const holding = { id: 'h', account_id: 'A', market: 'US', stock_code: 'GOOGL', stock_name: '구글', quantity: 1, avg_price: 1, avg_fx_rate: null, memo: null } as StockHolding
+  it('같은 시장·티커의 가장 최근 매매 기록 이름', () => {
+    const trades = [
+      trade({ side: 'buy', price: 1, quantity: 1, market: 'US', stock_code: 'GOOGL', stock_name: '알파벳', trade_date: '2026-01-01' }),
+      trade({ side: 'buy', price: 1, quantity: 1, market: 'US', stock_code: 'GOOGL', stock_name: '알파벳 A', trade_date: '2026-03-01' }),
+      trade({ side: 'buy', price: 1, quantity: 1, market: 'KR', stock_code: 'GOOGL', stock_name: '다른 시장' }),
+    ]
+    expect(knownStockName('US', 'GOOGL', [holding], trades)).toBe('알파벳 A')
+  })
+  it('매매 기록이 없으면 보유분 이름, 처음 보는 티커면 null', () => {
+    expect(knownStockName('US', 'GOOGL', [holding], [])).toBe('구글')
+    expect(knownStockName('US', 'AAPL', [holding], [])).toBeNull()
   })
 })

@@ -7,6 +7,9 @@
 // 응답:  { "results": [{ "code": "000660", "name": "SK하이닉스", "price": 1263000 },
 //                      { "code": "AAPL", "price": 347.73 }, { "code": "USDKRW", "price": 1325.4 }] }
 //
+// 이름만:  POST { "names": ["AAPL"] }  → { "results": [{ "code": "AAPL", "name": "애플" }] }
+//          매수 폼에서 티커를 넣으면 종목명을 채우는 데 쓴다 (네이버 한글 이름, 없으면 야후 영어 이름)
+//
 // 로그인한 사용자만 부를 수 있다 (공개 키만으로 부르면 401). 남이 무료 시세 프록시로 쓰다가
 // 네이버·야후에서 차단당하면 우리 조회도 막히기 때문.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -107,6 +110,25 @@ async function usPrice(ticker: string): Promise<Result> {
   return naver ? { code, ...naver } : { code, error: '시세를 찾지 못했습니다' }
 }
 
+/** 미국 종목 이름: 네이버 한글 이름 (애플), 없으면 야후 영어 이름 */
+async function usName(ticker: string): Promise<Result> {
+  const code = ticker.toUpperCase()
+  if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(code)) return { code, error: '티커 형식이 올바르지 않습니다' }
+  const naver = await naverUsPrice(code)
+  if (naver?.name) return { code, name: naver.name }
+  try {
+    const res = await get(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code.replace('.', '-'))}`)
+    if (res.ok) {
+      const meta = (await res.json())?.chart?.result?.[0]?.meta
+      const name = meta?.longName ?? meta?.shortName
+      if (typeof name === 'string' && name) return { code, name }
+    }
+  } catch {
+    // 아래 오류 반환
+  }
+  return { code, error: '이름을 찾지 못했습니다' }
+}
+
 async function usdKrw(): Promise<Result> {
   const code = 'USDKRW'
   const yahoo = await yahooPrice('KRW=X')
@@ -136,6 +158,8 @@ Deno.serve(async (req) => {
   if (!body || typeof body !== 'object') return json({ error: '요청 형식이 올바르지 않습니다' }, 400)
   const kr = codeList(body.codes)
   const us = codeList(body.us)
+  const names = codeList(body.names)
+  if (names.length > 0) return json({ results: await runLimited(names.map((code) => () => usName(code)), CONCURRENCY) })
 
   const results = await runLimited<Result>(
     [
