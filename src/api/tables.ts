@@ -10,6 +10,7 @@ import type {
   InvestAccount,
   InvestIncome,
   LedgerEntry,
+  LedgerFavorite,
   Loan,
   Member,
   Memo,
@@ -29,7 +30,7 @@ import { createTableApi } from './createTableApi'
 // '목록 + 추가/수정/삭제'만 필요한 테이블들
 // 사람을 지우면 이 테이블들의 member_id 가 비워지므로 함께 새로고침
 export const membersApi = createTableApi<Member>('members', {
-  alsoInvalidate: [['transactions'], ['ledger_entries'], ['bank_accounts'], ['deposits'], ['installment_savings'], ['invest_accounts'], ['recurring_rules'], ['favorite_transactions'], ['gift_events']],
+  alsoInvalidate: [['transactions'], ['ledger_entries'], ['bank_accounts'], ['deposits'], ['installment_savings'], ['invest_accounts'], ['recurring_rules'], ['favorite_transactions'], ['gift_events'], ['ledger_favorites']],
 })
 export const goalsApi = createTableApi<Goal>('goals', { order: [{ column: 'year' }] })
 
@@ -58,6 +59,8 @@ export const snapshotsApi = createTableApi<NetWorthSnapshot>('net_worth_snapshot
 export const ledgerApi = createTableApi<LedgerEntry>('ledger_entries', {
   order: [{ column: 'date' }, { column: 'created_at' }],
 })
+// 통장 기록 즐겨찾기 (누르면 입력 폼을 채움)
+export const ledgerFavoritesApi = createTableApi<LedgerFavorite>('ledger_favorites')
 
 // 반복 거래 규칙 (매달 예정 거래로 보여주고 [확인]하면 실제 거래가 됨). 규칙을 지우면 만든 거래의 연결이 비워진다
 export const recurringRulesApi = createTableApi<RecurringRule>('recurring_rules', {

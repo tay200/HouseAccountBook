@@ -375,6 +375,17 @@ export type LedgerEntry = {
   memo: string | null
 }
 
+/** 통장 기록 즐겨찾기. 누르면 입력 폼을 채운다 (amount 가 없으면 금액만 입력). 통장마다 따로 */
+export type LedgerFavorite = {
+  id: string
+  book: string
+  name: string
+  direction: 'in' | 'out'
+  amount: number | null
+  member_id: string | null
+  memo: string | null
+}
+
 // 새로 만들 때는 id 가 없다 (DB 가 만들어 줌)
 // 이월 여부는 예산 화면에서 따로 바꾼다
 export type CategoryInput = Omit<Category, 'id' | 'rollover'>

@@ -559,6 +559,50 @@ export type Database = {
           },
         ]
       }
+      ledger_favorites: {
+        Row: {
+          amount: number | null
+          book: string
+          created_at: string
+          direction: string
+          id: string
+          member_id: string | null
+          memo: string | null
+          name: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          book: string
+          created_at?: string
+          direction: string
+          id?: string
+          member_id?: string | null
+          memo?: string | null
+          name: string
+          user_id?: string
+        }
+        Update: {
+          amount?: number | null
+          book?: string
+          created_at?: string
+          direction?: string
+          id?: string
+          member_id?: string | null
+          memo?: string | null
+          name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_favorites_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loans: {
         Row: {
           created_at: string

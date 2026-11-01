@@ -44,7 +44,7 @@ type Props<T extends { id: string }> = {
   renderDetail?: (row: T) => ReactNode
   /**
    * 새 행 입력 중인지 바깥에서 제어하고 싶을 때 (예: 표 바깥의 '+ 추가' 버튼).
-   * 넘기지 않으면 표가 스스로 관리하고 아래쪽에 '+ 추가' 버튼을 보여준다.
+   * 넘기지 않으면 표가 스스로 관리하고 위쪽에 '+ 추가' 버튼을 보여준다.
    */
   adding?: boolean
   onAddingChange?: (adding: boolean) => void
@@ -78,7 +78,7 @@ function display(value: unknown, input?: FieldInput): ReactNode {
 /**
  * 목록을 표로 보여주고, 행마다 [수정]/[삭제], [+ 추가]를 제공하는 공용 표.
  * 열 정의(columns)만 바꿔서 예금, 적금, 대출, 매매 내역 등 여러 화면에서 재사용한다.
- * 새 행 입력 줄은 목록이 길어도 바로 보이도록 표 맨 위에 연다.
+ * [+ 추가] 버튼과 새 행 입력 줄은 목록이 길어도 바로 보이도록 표 맨 위에 둔다.
  */
 export default function CrudTable<T extends { id: string }>({
   rows,
@@ -118,6 +118,12 @@ export default function CrudTable<T extends { id: string }>({
 
   return (
     <div>
+      {/* 목록이 길어도 스크롤하지 않고 누를 수 있게 표 위에 둔다 */}
+      {!controlled && !adding && (
+        <button className="btn btn-secondary mb-3" onClick={() => setAdding(true)}>
+          {addLabel}
+        </button>
+      )}
       {adding && renderForm && (
         <Fragment key="new">{renderForm({ onDone: () => setAdding(false), onCancel: () => setAdding(false) })}</Fragment>
       )}
@@ -181,11 +187,6 @@ export default function CrudTable<T extends { id: string }>({
         </table>
       </div>
       {rows.length === 0 && <p className="py-6 text-center text-sm text-slate-400">{emptyText}</p>}
-      {!controlled && !adding && (
-        <button className="btn btn-secondary mt-3" onClick={() => setAdding(true)}>
-          {addLabel}
-        </button>
-      )}
     </div>
   )
 }

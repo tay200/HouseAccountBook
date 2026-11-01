@@ -32,6 +32,7 @@ const TABLES: [table: TableName, label: string, orderBy: string][] = [
   ['net_worth_snapshots', '연도별 순자산', 'id'],
   ['monthly_snapshots', '월별 자산 기록', 'id'],
   ['ledger_entries', '통장 기록', 'id'],
+  ['ledger_favorites', '통장 즐겨찾기', 'id'],
 ]
 
 type Row = Record<string, unknown>
