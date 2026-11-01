@@ -93,6 +93,16 @@ export type GiftEvent = {
   memo: string | null
 }
 
+/** 메모 게시판 한 글 (고정비 리스트, 용돈 입금 계좌 …) */
+export type Memo = {
+  id: string
+  title: string
+  content: string
+  pinned: boolean // 맨 위에 고정
+  created_at: string
+  updated_at: string
+}
+
 export const GIFT_EVENT_LABEL: Record<GiftEventType, string> = {
   wedding: '결혼',
   funeral: '장례',

@@ -11,6 +11,7 @@ const navItems = [
   { to: '/assets', label: '자산 · 부채' },
   { to: '/ledger', label: '통장 기록' },
   { to: '/gifts', label: '경조사' },
+  { to: '/memos', label: '메모' },
   { to: '/settings', label: '설정' },
 ]
 

@@ -12,6 +12,7 @@ import type {
   LedgerEntry,
   Loan,
   Member,
+  Memo,
   MonthlySnapshot,
   NetWorthSnapshot,
   RealAsset,
@@ -70,6 +71,11 @@ export const favoritesApi = createTableApi<FavoriteTransaction>('favorite_transa
 // 경조사비 장부 (저장·삭제는 가계부 거래와 함께 처리하는 api/gifts.ts 사용)
 export const giftEventsApi = createTableApi<GiftEvent>('gift_events', {
   order: [{ column: 'date', ascending: false }, { column: 'created_at', ascending: false }],
+})
+
+// 메모 게시판: 고정한 글이 먼저, 나머지는 최근에 고친 순서
+export const memosApi = createTableApi<Memo>('memos', {
+  order: [{ column: 'pinned', ascending: false }, { column: 'updated_at', ascending: false }],
 })
 
 // 잔액 맞추기 기록 (통장 기록 잔액, 카드 월 사용액 대조)
