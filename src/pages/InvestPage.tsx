@@ -2,10 +2,12 @@ import { useRef, useState } from 'react'
 import { describeCounts } from '../api/counts'
 import { investAccountsApi, investIncomesApi, monthlySnapshotsApi, stockHoldingsApi, stockTradesApi, useRefreshStockPrices, useStockPrices } from '../api/tables'
 import CrudTable, { type Column } from '../components/CrudTable'
+import DateRangeFilter from '../components/DateRangeFilter'
 import HoldingForm from '../components/HoldingForm'
 import { ProfitRate, SignedWon, StatCard } from '../components/Numbers'
 import TradeForm from '../components/TradeForm'
 import { useLookups } from '../hooks/useLookups'
+import { ALL_DATES, inDateRange, type DateRange } from '../lib/dateRange'
 import { currentMonth, formatMonth, formatNumber, formatWon, shiftMonth } from '../lib/format'
 import { analyzeInvest, investSummary, isIncluded, oversellProblem, withIncomes } from '../lib/invest'
 import { previousSnapshot } from '../lib/snapshots'
@@ -40,6 +42,8 @@ export default function InvestPage() {
   const tradesCardRef = useRef<HTMLDivElement>(null)
   // 보유 종목 폼: 'new' = 추가, 객체 = 그 보유분 수정
   const [holdingForm, setHoldingForm] = useState<'new' | StockHolding | null>(null)
+  // 매매 내역 기간 검색 (처음엔 전체)
+  const [tradeRange, setTradeRange] = useState<DateRange>(ALL_DATES)
 
   function startTrade(side: TradeSide, positionKey?: string) {
     setTradeForm({ side, positionKey })
@@ -50,6 +54,8 @@ export default function InvestPage() {
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? ''
   const { positions, open, realizedByTrade, oversold } = analyzeInvest(stockHoldings, trades, priceByCode)
   const fxMissing = open.some((p) => p.fxMissing)
+  // 매매 내역 표: 고른 기간만, 최신 거래가 위로. 계산(이동평균)은 위에서 날짜순 전체 기록으로 이미 끝났다
+  const shownTrades = trades.filter((t) => inDateRange(t.trade_date, tradeRange)).reverse()
 
   // 계좌별 현황에서 체크한 계좌만 위쪽 합계에 넣는다 (예: 연금 계좌 제외)
   const includedIds = new Set(accounts.filter(isIncluded).map((a) => a.id))
@@ -240,8 +246,12 @@ export default function InvestPage() {
           매수 1건 = 1줄, 매도 1건 = 1줄. 매도의 실현손익은 그때까지의 평균단가로 계산해요 (이동평균).
           미국 주식은 단가·수수료를 달러로 넣고, 거래한 날의 환율을 꼭 넣어 주세요 (오늘 환율이 미리 채워져요). 수수료를 모르면 0.
         </p>
+        <DateRangeFilter value={tradeRange} onChange={setTradeRange} />
         <CrudTable
-          rows={trades}
+          rows={shownTrades}
+          pageSize={20}
+          pageResetKey={`${tradeRange.from}~${tradeRange.to}`}
+          emptyText={trades.length > 0 ? '이 기간에는 매매 기록이 없어요.' : undefined}
           columns={tradeColumns({ accountName, priceByCode, realizedByTrade, oversold })}
           onSave={(values) => saveTrade.mutateAsync(values)}
           onDelete={(id) => deleteTrade.mutate(id)}

@@ -58,6 +58,10 @@ type Props<T extends { id: string }> = {
    * true 를 돌려주면 삭제한다.
    */
   confirmDelete?: (row: T) => boolean | Promise<boolean>
+  /** 한 페이지에 보여줄 줄 수 (없으면 전부 한 번에) */
+  pageSize?: number
+  /** 이 값이 바뀌면 1페이지로 돌아간다 (예: 바깥의 검색 조건) */
+  pageResetKey?: string
 }
 
 function display(value: unknown, input?: FieldInput): ReactNode {
@@ -93,6 +97,8 @@ export default function CrudTable<T extends { id: string }>({
   onAddingChange,
   renderForm,
   confirmDelete,
+  pageSize,
+  pageResetKey,
 }: Props<T>) {
   // 지금 수정 중인 기존 행 id
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -115,6 +121,19 @@ export default function CrudTable<T extends { id: string }>({
     if (c?.input?.type === 'select') return c.input.options.find((o) => o.value === v)?.label ?? (v ? String(v) : c.input.emptyLabel)
     return v as SortValue
   })
+
+  // 페이지 나누기: 정렬이나 바깥 검색 조건이 바뀌면 1페이지로
+  const [page, setPage] = useState(1)
+  const resetKey = `${sort?.key}:${sort?.dir}|${pageResetKey ?? ''}`
+  const [prevResetKey, setPrevResetKey] = useState(resetKey)
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey)
+    setPage(1)
+  }
+  const pageCount = pageSize ? Math.max(1, Math.ceil(sorted.length / pageSize)) : 1
+  // 지워서 마지막 페이지가 사라지면 그 앞 페이지를 보여준다
+  const currentPage = Math.min(page, pageCount)
+  const visible = pageSize ? sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize) : sorted
 
   return (
     <div>
@@ -163,7 +182,7 @@ export default function CrudTable<T extends { id: string }>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {sorted.map((row) => (
+            {visible.map((row) => (
               <DisplayRow
                 key={row.id}
                 row={row}
@@ -187,6 +206,33 @@ export default function CrudTable<T extends { id: string }>({
         </table>
       </div>
       {rows.length === 0 && <p className="py-6 text-center text-sm text-slate-400">{emptyText}</p>}
+      {pageSize && rows.length > 0 && <Pager page={currentPage} pageCount={pageCount} total={rows.length} onChange={setPage} />}
+    </div>
+  )
+}
+
+/** 표 아래 페이지 버튼: ‹ 1 2 3 4 5 › (지금 페이지 앞뒤로 다섯 개까지) */
+function Pager({ page, pageCount, total, onChange }: { page: number; pageCount: number; total: number; onChange: (page: number) => void }) {
+  const first = Math.max(1, Math.min(page - 2, pageCount - 4))
+  const pages = Array.from({ length: Math.min(5, pageCount) }, (_, i) => first + i)
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-center gap-1 text-sm">
+      <span className="mr-2 text-xs text-slate-500">총 {formatNumber(total)}건</span>
+      {pageCount > 1 && (
+        <>
+          <button className="btn btn-text" onClick={() => onChange(page - 1)} disabled={page === 1} aria-label="이전 페이지">‹</button>
+          {pages.map((p) => (
+            <button
+              key={p}
+              className={`min-w-8 rounded px-2 py-1 ${p === page ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+              onClick={() => onChange(p)}
+            >
+              {p}
+            </button>
+          ))}
+          <button className="btn btn-text" onClick={() => onChange(page + 1)} disabled={page === pageCount} aria-label="다음 페이지">›</button>
+        </>
+      )}
     </div>
   )
 }
