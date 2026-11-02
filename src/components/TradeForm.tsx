@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { lookupUsStockName } from '../api/tables'
+import { lookupStockName } from '../api/tables'
 import { formatNumber, formatUsd, formatWon, todayString } from '../lib/format'
 import { codeProblem, currentFx, knownStockName, normalizeCode, oversellProblem, type Position } from '../lib/invest'
 import type { InvestAccount, Market, StockHolding, StockPrice, StockTrade, TradeSide } from '../lib/types'
@@ -58,19 +58,23 @@ export default function TradeForm({ side, accounts, positions, holdings, trades,
   }))
   const set = (key: keyof typeof v, value: string) => setV((prev) => ({ ...prev, [key]: value }))
 
-  // 미국 주식 매수: 티커를 넣고 잠깐 멈추면 종목명을 채운다.
+  // 매수: 종목코드(미국은 티커)를 넣고 잠깐 멈추면 종목명을 채운다.
   // 직접 고친 이름은 덮어쓰지 않도록, 자동으로 채운 이름(autoName)이거나 비어 있을 때만 바꾼다
   const autoName = useRef('')
-  // 어느 티커를 조회했고 결과가 어땠는지 (티커가 바뀌면 이전 결과는 무시)
-  const [lookup, setLookup] = useState<{ ticker: string; status: 'loading' | 'notFound' } | null>(null)
-  const usTicker = (market: Market, code: string) => {
-    const t = side === 'buy' && market === 'US' ? normalizeCode('US', code) : ''
-    return t && !codeProblem('US', t) ? t : ''
+  // 어느 종목을 조회했고 결과가 어땠는지 (시장·코드가 바뀌면 이전 결과는 무시)
+  const [lookup, setLookup] = useState<{ key: string; status: 'loading' | 'notFound' } | null>(null)
+  const lookupCodeOf = (market: Market, code: string) => {
+    if (side !== 'buy') return ''
+    // 한국 종목은 6자리를 다 넣었을 때만 (덜 넣으면 앞을 0으로 채워서 엉뚱한 종목을 찾게 된다)
+    if (market === 'KR' && code.trim().length !== 6) return ''
+    const c = normalizeCode(market, code)
+    return c && !codeProblem(market, c) ? c : ''
   }
-  const lookupTicker = usTicker(v.market, v.stock_code)
+  const lookupCode = lookupCodeOf(v.market, v.stock_code)
+  const lookupKey = lookupCode && `${v.market}:${lookupCode}`
   // 전에 적어 둔 이름이 있으면 조회하지 않는다 (직접 적은 '알파벳 A' 같은 이름을 그대로 쓴다)
-  const known = lookupTicker ? knownStockName('US', lookupTicker, holdings, trades) : null
-  const nameLookup = lookup?.ticker === lookupTicker ? lookup.status : 'idle'
+  const known = lookupCode ? knownStockName(v.market, lookupCode, holdings, trades) : null
+  const nameLookup = lookup?.key === lookupKey ? lookup.status : 'idle'
 
   function fillName(name: string) {
     setV((prev) => {
@@ -82,26 +86,26 @@ export default function TradeForm({ side, accounts, positions, holdings, trades,
 
   function changeCode(code: string) {
     set('stock_code', code)
-    const ticker = usTicker(v.market, code)
-    const name = ticker && knownStockName('US', ticker, holdings, trades)
+    const c = lookupCodeOf(v.market, code)
+    const name = c && knownStockName(v.market, c, holdings, trades)
     if (name) fillName(name)
   }
 
   useEffect(() => {
-    if (!lookupTicker || known) return
+    if (!lookupKey || known) return
     let cancelled = false
     const timer = setTimeout(async () => {
-      setLookup({ ticker: lookupTicker, status: 'loading' })
-      const name = await lookupUsStockName(lookupTicker)
+      setLookup({ key: lookupKey, status: 'loading' })
+      const name = await lookupStockName(v.market, lookupCode)
       if (cancelled) return
       if (name) fillName(name)
-      setLookup(name ? null : { ticker: lookupTicker, status: 'notFound' })
+      setLookup(name ? null : { key: lookupKey, status: 'notFound' })
     }, 500)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [lookupTicker, known])
+  }, [lookupKey, v.market, lookupCode, known])
 
   function changeMarket(market: Market) {
     // 미국 주식으로 바꾸면 환율에 오늘 환율을 미리 채워 둔다 (예전 거래면 그날 환율로 고치면 됨)
@@ -110,9 +114,9 @@ export default function TradeForm({ side, accounts, positions, holdings, trades,
       if (market === 'US' && fx === '' && fxNow) fx = String(fxNow)
       return { ...prev, market, fx_rate: fx }
     })
-    // 티커를 먼저 넣고 시장을 바꾼 경우에도 전에 적어 둔 이름을 채운다
-    const ticker = usTicker(market, v.stock_code)
-    const name = ticker && knownStockName('US', ticker, holdings, trades)
+    // 코드를 먼저 넣고 시장을 바꾼 경우에도 전에 적어 둔 이름을 채운다
+    const c = lookupCodeOf(market, v.stock_code)
+    const name = c && knownStockName(market, c, holdings, trades)
     if (name) fillName(name)
   }
 
@@ -253,7 +257,7 @@ export default function TradeForm({ side, accounts, positions, holdings, trades,
             <input
               className={inputCls}
               value={v.stock_name}
-              placeholder={v.market === 'US' ? '티커를 넣으면 자동으로 채워요' : undefined}
+              placeholder={v.market === 'US' ? '티커를 넣으면 자동으로 채워요' : '종목코드를 넣으면 자동으로 채워요'}
               onChange={(e) => set('stock_name', e.target.value)}
             />
             {nameLookup === 'loading' && <span className="block text-xs text-slate-400">이름 찾는 중…</span>}

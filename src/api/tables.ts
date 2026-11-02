@@ -12,6 +12,7 @@ import type {
   LedgerEntry,
   LedgerFavorite,
   Loan,
+  Market,
   Member,
   Memo,
   MonthlySnapshot,
@@ -156,11 +157,16 @@ export function useSaveStockPrice() {
 
 type PriceResult = { code: string; name?: string; price?: number; error?: string }
 
-/** 미국 티커의 종목명 (네이버 한글 이름, 없으면 야후 영어 이름). 못 찾으면 null */
-export async function lookupUsStockName(ticker: string): Promise<string | null> {
-  const { data, error } = await supabase.functions.invoke<{ results: PriceResult[] }>('stock-prices', { body: { names: [ticker] } })
+/**
+ * 종목명 조회. 못 찾으면 null
+ * - 한국: 현재가 조회가 함께 돌려주는 네이버 종목명
+ * - 미국: 네이버 한글 이름, 없으면 야후 영어 이름
+ */
+export async function lookupStockName(market: Market, code: string): Promise<string | null> {
+  const body = market === 'KR' ? { codes: [code] } : { names: [code] }
+  const { data, error } = await supabase.functions.invoke<{ results: PriceResult[] }>('stock-prices', { body })
   if (error) return null
-  return data?.results?.find((r) => r.code === ticker)?.name ?? null
+  return data?.results?.find((r) => r.code === code)?.name ?? null
 }
 
 /**
