@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { monthStart, shiftMonth } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import { fetchAll } from './fetchAll'
+import { searchLabel, type TxSearch } from '../lib/txSearch'
 import type { Transaction, TransactionInput } from '../lib/types'
 
 /** 화면에서 쓰는 거래 열 */
@@ -98,14 +99,31 @@ function escapeLike(text: string) {
 }
 
 /**
- * 모든 달에서 거래 찾기: 내용에 term 이 들어 있거나(대소문자 무시), term 이 숫자면 금액이 같은 거래.
- * term 이 빈 문자열이면 조회하지 않는다.
+ * 모든 달에서 거래 찾기.
+ * 태그 검색이면 그 태그가 붙은 거래, 내용 검색이면 내용에 text 가 들어 있거나(대소문자 무시) text 가 숫자면 금액이 같은 거래.
+ * search 가 null 이면 조회하지 않는다.
  */
-export function useSearchTransactions(term: string) {
+export function useSearchTransactions(search: TxSearch | null) {
   return useQuery({
-    queryKey: ['transactions', 'search', term],
-    enabled: term !== '',
+    queryKey: ['transactions', 'search', search?.kind, search ? searchLabel(search) : ''],
+    enabled: search !== null,
     queryFn: async () => {
+      if (!search) return []
+      if (search.kind === 'tag') {
+        // tags @> {태그} : 태그 인덱스(GIN)를 쓴다
+        const rows = await fetchAll((from, to) =>
+          supabase
+            .from('transactions')
+            .select(SELECT_COLUMNS)
+            .contains('tags', [search.tag])
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .order('id')
+            .range(from, to),
+        )
+        return rows as Transaction[]
+      }
+      const term = search.text
       const byMemo = fetchAll((from, to) =>
         supabase
           .from('transactions')

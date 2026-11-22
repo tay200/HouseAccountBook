@@ -13,6 +13,7 @@ import { useMonth } from '../hooks/useMonth'
 import { formatWon } from '../lib/format'
 import { isBigSpend, isConsumption, sumByType } from '../lib/stats'
 import { hasTxFilters, readTxFilters, removeTxFilters, type KindFilter } from '../lib/txFilters'
+import { matchesSearch, parseSearch, searchLabel, type TxSearch } from '../lib/txSearch'
 import { KIND_LABEL, type Transaction, type TxKind, type TxType } from '../lib/types'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
@@ -21,14 +22,6 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 function formatDay(date: string, withYear = false) {
   const d = new Date(`${date}T00:00:00`)
   return `${withYear ? `${d.getFullYear()}.` : ''}${d.getMonth() + 1}/${d.getDate()} (${WEEKDAYS[d.getDay()]})`
-}
-
-/** 검색어와 맞는 거래: 내용에 들어 있거나(대소문자 무시), 검색어가 숫자면 금액이 같은 것 */
-function matchesSearch(t: Transaction, term: string) {
-  if (!term) return true
-  if ((t.memo ?? '').toLowerCase().includes(term.toLowerCase())) return true
-  const digits = term.replace(/,/g, '')
-  return /^\d+$/.test(digits) && t.amount === Number(digits)
 }
 
 // 성격 배지: 수입은 파랑 계열, 지출은 빨강 계열 (같은 계열 안에서 진하기로 구분)
@@ -88,9 +81,14 @@ export default function TransactionsPage() {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
     return () => clearTimeout(timer)
   }, [search])
-  const searchingAll = searchAllMonths && debouncedSearch !== ''
-  const searchQuery = useSearchTransactions(searchingAll ? debouncedSearch : '')
+  // 모든 달에서 찾을 것: 검색어가 있으면 검색어로, 없으면 고른 태그로 (나머지 필터는 아래에서 화면이 거른다)
+  const allMonthsSearch: TxSearch | null = searchAllMonths
+    ? (parseSearch(debouncedSearch) ?? (tagFilter ? { kind: 'tag', tag: tagFilter } : null))
+    : null
+  const searchingAll = allMonthsSearch !== null
+  const searchQuery = useSearchTransactions(allMonthsSearch)
   const { data: transactions = [], isPending } = searchingAll ? searchQuery : monthQuery
+  const currentSearch = parseSearch(search)
 
   // 휴대폰 하단 (+) 버튼으로 들어오면: 수정 중이던 것을 닫고 새 거래 폼에 포커스
   const newState = location.state as NewTransactionState | null
@@ -118,7 +116,7 @@ export default function TransactionsPage() {
       (!paymentFilter || (paymentFilter === 'none' ? !t.payment_method_id : t.payment_method_id === paymentFilter)) &&
       (!memberFilter || (memberFilter === 'shared' ? !t.member_id : t.member_id === memberFilter)) &&
       (!tagFilter || t.tags.includes(tagFilter)) &&
-      matchesSearch(t, search.trim()),
+      matchesSearch(t, currentSearch),
   )
   const incomeTotal = sumByType(filtered, 'income')
   const expenseTotal = sumByType(filtered, 'expense')
@@ -214,7 +212,7 @@ export default function TransactionsPage() {
             </select>
           )}
           <div className="flex min-w-60 flex-1 items-center gap-2">
-            <input className="input min-w-0 flex-1" placeholder="내용 또는 금액 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input className="input min-w-0 flex-1" placeholder="내용·금액 또는 #태그 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
             <label className="flex shrink-0 items-center gap-1 text-sm text-slate-600">
               <input type="checkbox" checked={searchAllMonths} onChange={(e) => setSearchAllMonths(e.target.checked)} />
               모든 달
@@ -286,7 +284,7 @@ export default function TransactionsPage() {
           </table>
         </div>
 
-        {searchingAll && <p className="text-xs text-slate-500">모든 달에서 ‘{debouncedSearch}’ 검색 결과예요. 위의 달 선택과 상관없이 보여줘요.</p>}
+        {allMonthsSearch && <p className="text-xs text-slate-500">모든 달에서 ‘{searchLabel(allMonthsSearch)}’ 검색 결과예요. 위의 달 선택과 상관없이 보여줘요.</p>}
         {isPending ? (
           <p className="py-8 text-center text-sm text-slate-400">불러오는 중…</p>
         ) : (
